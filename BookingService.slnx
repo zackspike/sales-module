@@ -1,5 +1,6 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/BookingService.Api/BookingService.Api.csproj" />
-  </Folder>
+  <Project Path="BookingService.Api/BookingService.Api.csproj" />
+  <Project Path="BookingService.Application/BookingService.Application.csproj" />
+  <Project Path="BookingService.Domain/BookingService.Domain.csproj" />
+  <Project Path="BookingService.Infrastructure/BookingService.Infrastructure.csproj" />
 </Solution>
