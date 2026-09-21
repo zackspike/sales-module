@@ -1,3 +1,5 @@
+using BookingService.Api.Common;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
@@ -15,10 +17,17 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseGlobalExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    app.MapGet("/test/error", () =>
+    {
+        throw new InvalidOperationException("Simulation of an unhandled error.");
+    });
 }
 
 app.UseCors();
