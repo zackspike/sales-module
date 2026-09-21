@@ -1,7 +1,17 @@
+using Microsoft.OpenApi;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "BookingService API (Sap-atitos)",
+        Version = "v1",
+        Description = "Backend API responsible for ticket purchasing, idempotency handling, and issuance (MVP-02)."
+    });
+});
 
 builder.Services.AddCors(options =>
 {
