@@ -480,3 +480,12 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Agent runtime state
+.agents/current/*
+!.agents/current/.gitkeep
+
+# MCP configuration with sensitive tokens
+.agents/plugins/**/mcp_config.json
+!.agents/plugins/**/mcp_config.example.json
+
