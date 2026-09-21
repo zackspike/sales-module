@@ -26,6 +26,8 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddSingleton<BookingMemoryStore>();
+
 var app = builder.Build();
 
 app.UseGlobalExceptionHandler();
@@ -45,7 +47,6 @@ app.UseCors();
 
 app.MapGet("/", () => Results.Ok(new { status = "BookingService API Online", version = "0.0.1"}));
 
-builder.Services.AddSingleton<BookingMemoryStore>();
 app.MapBookingEndpoints();
 
 app.Run();
