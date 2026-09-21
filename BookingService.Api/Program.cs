@@ -1,3 +1,5 @@
+using BookingService.Api.Endpoints;
+using BookingService.Infrastructure;
 using BookingService.Api.Common;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,5 +35,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 
 app.MapGet("/", () => Results.Ok(new { status = "BookingService API Online", version = "0.0.1"}));
+
+builder.Services.AddSingleton<BookingMemoryStore>();
+app.MapBookingEndpoints();
 
 app.Run();
