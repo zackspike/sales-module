@@ -11,4 +11,5 @@ public class Order
     public string Status { get; set; } = "PendingPayment"; 
     // 2 possible values: "PendingPayment", "Paid"
     public DateTime CreatedAtUtc { get; set; }
+    public string? ExternalTransactionId { get; set; }
 }

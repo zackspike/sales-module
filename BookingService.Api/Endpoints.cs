@@ -113,8 +113,8 @@ public static class BookingEndpoints
             return Results.Ok(response);
         });
 
-        // 6. POST /orders/{orderId}/payment
-        ordersGroup.MapPost("/payment", (Guid orderId, PaymentDto dto, BookingMemoryStore store) =>
+        // 6. POST /orders/{orderId}/confirm-payment
+        ordersGroup.MapPost("/confirm-payment", (Guid orderId, PaymentConfirmationDto dto, BookingMemoryStore store) =>
         {
             if (!store.Orders.TryGetValue(orderId, out var order))
             {
@@ -133,6 +133,7 @@ public static class BookingEndpoints
             }
 
             order.Status = "Paid";
+            order.ExternalTransactionId = dto.ExternalTransactionId;
             reservation.IsConfirmed = true;
 
             var issuedTickets = new List<TicketDto>();
