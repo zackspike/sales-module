@@ -5,10 +5,10 @@ namespace BookingService.Domain;
 public class Ticket
 {
     public Guid Id { get; set; }
-    public Guid OrderId { get; set; }
-    public Guid SeatId { get; set; }
-    public required string TicketNumber { get; set; }
-    public required string Section { get; set; }
-    public decimal Price { get; set; }
+    public Guid EventId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string TicketCode { get; set; } = string.Empty;
+    public Guid IdempotencyKey { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 }
