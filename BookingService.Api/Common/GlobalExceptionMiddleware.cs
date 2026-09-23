@@ -47,6 +47,7 @@ public sealed class GlobalExceptionMiddleware
 
         var (statusCode, message) = exception switch
         {
+            BadHttpRequestException => (HttpStatusCode.BadRequest, exception.Message),
             KeyNotFoundException => (HttpStatusCode.NotFound, "The requested resource was not found."),
             ArgumentException => (HttpStatusCode.BadRequest, exception.Message),
             InvalidOperationException => (HttpStatusCode.BadRequest, exception.Message),
