@@ -148,7 +148,7 @@ public static class BookingEndpoints
                     Id = Guid.NewGuid(),
                     OrderId = order.Id,
                     SeatId = seat.Id,
-                    TicketNumber = $"TK-{Random.Shared.Next(10000, 99999)}",
+                    TicketNumber = TicketCodeGenerator.Generate(),
                     Section = seat.Section,
                     Price = seat.Price,
                     CreatedAtUtc = DateTime.UtcNow
