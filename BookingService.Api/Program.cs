@@ -1,6 +1,9 @@
 using Microsoft.OpenApi;
 using BookingService.Api.Endpoints;
 using BookingService.Infrastructure;
+using BookingService.Infrastructure.Repositories;
+using BookingService.Application.Repositories;
+using BookingService.Application.Tickets;
 using BookingService.Api.Common;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,6 +30,9 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSingleton<BookingMemoryStore>();
+builder.Services.AddSingleton<ITicketRepository, InMemoryTicketRepository>();
+builder.Services.AddSingleton<IEventCatalog, InMemoryEventCatalog>();
+builder.Services.AddTransient<TicketPurchaseValidator>();
 
 var app = builder.Build();
 
