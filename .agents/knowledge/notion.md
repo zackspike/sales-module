@@ -82,6 +82,7 @@
 ### Requirements: SP-07 & SP-08 — Unique Ticket Codes
 
 * **Return Code (`SP-07`):** The purchase response must return the generated `ticketCode`.
+* **Format:** The code uses the format `"TK-{GUID:N}"` (e.g., `TK-4f32a76fbf424b9195980da672807f87`). The standard GUID string shown in the SP-05 example response is illustrative.
 * **Global Uniqueness Guarantee (`SP-08`):**
   * The ticket code generation mechanism (UUID / GUID) must guarantee that no two tickets share a code across all events in the system.
   * This rule holds even if the same person purchases multiple tickets for the exact same event.
@@ -107,7 +108,7 @@
 | `MOCK-02` | `InMemoryBookingStore` | Infrastructure | Thread-safe in-memory store with seeded events. |
 | `VAL-01` | Request & Response DTOs | Application | Strongly-typed contracts for input/output. |
 | `VAL-02` | Purchase Validations | Application | Required fields, email format (`400`), event existence (`404`). |
-| `VAL-03` | Unique Ticket Code Generator | Domain | Collision-free GUID code generator. |
+| `VAL-03` | Unique Ticket Code Generator | Domain | As example: Collision-free GUID format code generator. |
 | `API-01` | `POST /events/{id}/tickets` | Api / Application | Endpoint handler orchestrating purchase. |
 | `API-02` | Idempotency Handler | Api / Application | `X-Idempotency-Key` validation and replay cache. |
 
