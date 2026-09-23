@@ -2,7 +2,9 @@ namespace BookingService.Api.Dtos;
 
 public record TicketDto(
     Guid TicketId,
-    string TicketNumber,
-    string Section,
-    decimal Price
+    Guid EventId,
+    string FullName,
+    string Email,
+    string TicketCode,
+    DateTime CreatedAtUtc
 );

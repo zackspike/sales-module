@@ -1,164 +1,84 @@
+using System.Text.RegularExpressions;
 using BookingService.Api.Dtos;
 using BookingService.Domain;
 using BookingService.Infrastructure;
+using BookingService.Application.Tickets;
+using BookingService.Application.Repositories;
+using Microsoft.AspNetCore.Mvc;
 
 namespace BookingService.Api.Endpoints;
 
 public static class BookingEndpoints
 {
+    private static readonly Regex EmailRegex = new(
+        @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public static void MapBookingEndpoints(this WebApplication app)
     {
-        var eventsGroup = app.MapGroup("/events/{eventId:guid}");
-
-        // 1. GET /events/{eventId}/tickets
-        eventsGroup.MapGet("/tickets", (Guid eventId, BookingMemoryStore store) =>
+        // SP-05-T1: POST /events/{event-id}/tickets
+        app.MapPost("/events/{eventId:guid}/tickets", (
+            Guid eventId,
+            PurchaseTicketCommand command,
+            [FromHeader(Name = "Idempotency-Key")] Guid? idempotencyHeader,
+            IEventCatalog eventCatalog,
+            ITicketRepository ticketRepository) =>
         {
-            var summary = store.Seats.Values
-                .Where(s => s.EventId == eventId && s.Status == "Available")
-                .GroupBy(s => new { s.Section, s.Price })
-                .Select(g => new TicketSummaryDto(g.Key.Section, g.Key.Price, g.Count()))
-                .ToList();
-
-            return Results.Ok(summary);
-        });
-
-        // 2. GET /events/{eventId}/seats
-        eventsGroup.MapGet("/seats", (Guid eventId, BookingMemoryStore store) =>
-        {
-            var availableSeats = store.Seats.Values
-                .Where(s => s.EventId == eventId && s.Status == "Available")
-                .Select(s => new SeatDto(s.Id, s.Section, s.SeatNumber, s.Price, s.Status))
-                .ToList();
-
-            return Results.Ok(availableSeats);
-        });
-
-        // 3. POST /events/{eventId}/reservations
-        eventsGroup.MapPost("/reservations", (Guid eventId, CreateReservationDto dto, BookingMemoryStore store) =>
-        {
-            var selectedSeats = dto.SeatIds
-                .Select(id => store.Seats.GetValueOrDefault(id))
-                .Where(s => s != null && s.EventId == eventId && s.Status == "Available")
-                .ToList();
-
-            if (selectedSeats.Count != dto.SeatIds.Count)
+            // 1. SP-05-T2: Retorna 404 si el ID no corresponde a un evento conocido
+            if (!eventCatalog.Exists(eventId))
             {
-                return Results.BadRequest(new { error = "Uno o más asientos no están disponibles o no existen." });
+                return Results.NotFound(new { error = $"Event with id '{eventId}' not found." });
             }
 
-            foreach (var seat in selectedSeats)
+            // 2. SP-05-T2: Validar presencia de campos requeridos y reportar cuál falló
+            if (string.IsNullOrWhiteSpace(command.FullName))
             {
-                seat!.Status = "Reserved";
+                return Results.BadRequest(new { field = "fullName", error = "Full name is required." });
             }
 
-            var reservation = new Reservation
+            if (string.IsNullOrWhiteSpace(command.Email))
+            {
+                return Results.BadRequest(new { field = "email", error = "Email is required." });
+            }
+
+            // 3. SP-05-T2: Validar formato del correo electrónico
+            if (!EmailRegex.IsMatch(command.Email.Trim()))
+            {
+                return Results.BadRequest(new { field = "email", error = "Email format is invalid." });
+            }
+
+            // 4. SP-06-T1 & SP-08-T1: Generar ticket y resolver idempotencia
+            var idempotencyKey = idempotencyHeader ?? Guid.NewGuid();
+            var ticketCode = $"TCK-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+
+            var newTicket = new Ticket
             {
                 Id = Guid.NewGuid(),
                 EventId = eventId,
-                SeatIds = dto.SeatIds,
-                UserEmail = dto.UserEmail,
-                ExpiresAtUtc = DateTime.UtcNow.AddMinutes(10),
-                IsConfirmed = false
-            };
-
-            store.Reservations[reservation.Id] = reservation;
-
-            var response = new ReservationDto(reservation.Id, reservation.EventId, reservation.SeatIds, reservation.ExpiresAtUtc);
-            return Results.Created($"/reservations/{reservation.Id}", response);
-        });
-
-        // 4. POST /events/{eventId}/orders
-        eventsGroup.MapPost("/orders", (Guid eventId, CreateOrderDto dto, BookingMemoryStore store) =>
-        {
-            if (!store.Reservations.TryGetValue(dto.ReservationId, out var reservation) || reservation.EventId != eventId)
-            {
-                return Results.NotFound(new { error = "Reserva no encontrada." });
-            }
-
-            if (DateTime.UtcNow > reservation.ExpiresAtUtc)
-            {
-                return Results.BadRequest(new { error = "La reserva ha expirado." });
-            }
-
-            var totalAmount = reservation.SeatIds.Sum(id => store.Seats[id].Price);
-
-            var order = new Order
-            {
-                Id = Guid.NewGuid(),
-                EventId = eventId,
-                ReservationId = reservation.Id,
-                TotalAmount = totalAmount,
-                Status = "PendingPayment",
+                FullName = command.FullName.Trim(),
+                Email = command.Email.Trim(),
+                TicketCode = ticketCode,
+                IdempotencyKey = idempotencyKey,
                 CreatedAtUtc = DateTime.UtcNow
             };
 
-            store.Orders[order.Id] = order;
+            var ticket = ticketRepository.GetOrAdd(idempotencyKey, newTicket, out var wasCreated);
 
-            var response = new OrderDto(order.Id, order.ReservationId, order.TotalAmount, order.Status, order.CreatedAtUtc);
-            return Results.Created($"/orders/{order.Id}", response);
-        });
+        // 5. SP-07-T1: Retornar DTO del ticket
+        var response = new TicketDto(
+            ticket.Id,
+            ticket.EventId,
+            ticket.FullName,
+            ticket.Email,
+            ticket.TicketCode,
+            ticket.CreatedAtUtc
+        );
 
-        // --- Rutas de Orders ---
-        var ordersGroup = app.MapGroup("/orders/{orderId:guid}");
+        return wasCreated 
+            ? Results.Created($"/events/{eventId}/tickets/{ticket.Id}", response)
+            : Results.Ok(response);
 
-        // 5. GET /orders/{orderId}
-        ordersGroup.MapGet("/", (Guid orderId, BookingMemoryStore store) =>
-        {
-            if (!store.Orders.TryGetValue(orderId, out var order))
-            {
-                return Results.NotFound(new { error = "Orden no encontrada." });
-            }
-
-            var response = new OrderDto(order.Id, order.ReservationId, order.TotalAmount, order.Status, order.CreatedAtUtc);
-            return Results.Ok(response);
-        });
-
-        // 6. POST /orders/{orderId}/confirm-payment
-        ordersGroup.MapPost("/confirm-payment", (Guid orderId, PaymentConfirmationDto dto, BookingMemoryStore store) =>
-        {
-            if (!store.Orders.TryGetValue(orderId, out var order))
-            {
-                return Results.NotFound(new { error = "Orden no encontrada." });
-            }
-
-            if (order.Status == "Paid")
-            {
-                return Results.BadRequest(new { error = "La orden ya ha sido pagada previamente." });
-            }
-
-            var reservation = store.Reservations[order.ReservationId];
-            if (DateTime.UtcNow > reservation.ExpiresAtUtc)
-            {
-                return Results.BadRequest(new { error = "La reserva ha expirado." });
-            }
-
-            order.Status = "Paid";
-            order.ExternalTransactionId = dto.ExternalTransactionId;
-            reservation.IsConfirmed = true;
-
-            var issuedTickets = new List<TicketDto>();
-
-            foreach (var seatId in reservation.SeatIds)
-            {
-                var seat = store.Seats[seatId];
-                seat.Status = "Sold";
-
-                var ticket = new Ticket
-                {
-                    Id = Guid.NewGuid(),
-                    OrderId = order.Id,
-                    SeatId = seat.Id,
-                    TicketNumber = $"TK-{Random.Shared.Next(10000, 99999)}",
-                    Section = seat.Section,
-                    Price = seat.Price,
-                    CreatedAtUtc = DateTime.UtcNow
-                };
-
-                store.Tickets[ticket.Id] = ticket;
-                issuedTickets.Add(new TicketDto(ticket.Id, ticket.TicketNumber, ticket.Section, ticket.Price));
-            }
-
-            return Results.Ok(new { message = "Pago exitoso", tickets = issuedTickets });
+            
         });
     }
 }
