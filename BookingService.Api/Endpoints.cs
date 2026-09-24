@@ -1,7 +1,7 @@
 using BookingService.Api.Dtos;
-using BookingService.Domain;
-using BookingService.Application.Tickets;
 using BookingService.Application.Repositories;
+using BookingService.Application.Tickets;
+using BookingService.Domain;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookingService.Api.Endpoints;
@@ -57,7 +57,7 @@ public static class BookingEndpoints
                 ticket.CreatedAtUtc
             );
 
-            return wasCreated 
+            return wasCreated
                 ? Results.Created($"/events/{eventId}/tickets/{ticket.Id}", response)
                 : Results.Ok(response);
         });

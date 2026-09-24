@@ -7,7 +7,8 @@ on:
     branches: [main, dev]
 
 jobs:
-  test: 
+  lint:
+    name: "Code Quality & Linting"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,11 +21,30 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-        
+
+      - name: "install dependencies"
+        run: dotnet restore
+
+      - name: "verify formatting (lint)"
+        run: dotnet format --verify-no-changes
+
+  test:
+    name: "Tests"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: "checkout code"
+        uses: actions/checkout@v4
+
+      - name: "setup dotnet"
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: "install dependencies"
         run: dotnet restore
 
       - name: "run tests"
         run: dotnet test --no-restore --verbosity normal
-
-

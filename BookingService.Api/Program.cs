@@ -1,7 +1,7 @@
-using Microsoft.OpenApi;
+using BookingService.Api.Common;
 using BookingService.Api.Endpoints;
 using BookingService.Infrastructure;
-using BookingService.Api.Common;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,7 +45,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 
-app.MapGet("/", () => Results.Ok(new { status = "BookingService API Online", version = "0.0.1"}));
+app.MapGet("/", () => Results.Ok(new { status = "BookingService API Online", version = "0.0.1" }));
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapBookingEndpoints();
 

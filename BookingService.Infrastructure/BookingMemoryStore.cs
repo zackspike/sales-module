@@ -9,6 +9,5 @@ public class BookingMemoryStore
 
     public BookingMemoryStore()
     {
-        
     }
 }

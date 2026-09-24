@@ -1,4 +1,4 @@
-﻿namespace BookingService.Infrastructure;
+namespace BookingService.Infrastructure;
 
 public class Class1
 {
