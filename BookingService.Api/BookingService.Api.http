@@ -1,0 +1,19 @@
+@BookingService.Api_HostAddress = http://localhost:5283
+
+### 1. Health check / Root endpoint
+GET {{BookingService.Api_HostAddress}}/
+Accept: application/json
+
+### 2. Swagger OpenAPI Specification
+GET {{BookingService.Api_HostAddress}}/swagger/v1/swagger.json
+Accept: application/json
+
+### 3. (Preview) Ticket purchase endpoint template
+# POST {{BookingService.Api_HostAddress}}/events/event-123/tickets
+# Content-Type: application/json
+# X-Idempotency-Key: 11111111-2222-3333-4444-555555555555
+#
+# {
+#   "fullName": "Jane Doe",
+#   "email": "jane.doe@example.com"
+# }
