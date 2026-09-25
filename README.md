@@ -16,6 +16,7 @@ The repository follows Domain-Driven Design and Clean Architecture principles:
 
 ```text
 booking-service/
+├── .github/workflows/             # CI/CD and release pipelines (validation.yml, release.yml)
 ├── BookingService.Api/            # Minimal APIs, endpoints, middleware, HTTP models
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
 ├── BookingService.Domain/         # Core business entities (Ticket, Event), value objects, domain rules
@@ -163,3 +164,29 @@ bash scripts/bump.sh --dry-run
 3. Local `main` branch is up to date with `origin/main`.
 4. CI workflow (`validation.yml`) passed on GitHub for current commit (`HEAD`).
 5. Unit test suite passes locally (`dotnet test`).
+
+---
+
+## CI/CD & Automated Pipelines
+
+The repository features automated GitHub Actions workflows to guarantee code quality and automate releases:
+
+### 1. PR & Validation Pipeline (`.github/workflows/validation.yml`)
+* **Trigger:** Pull Requests and pushes to `main` and `dev`.
+* **Jobs:**
+  * **Code Quality & Linting:** Enforces C# styling via `dotnet format --verify-no-changes`.
+  * **Tests:** Restores dependencies and runs unit tests via `dotnet test`.
+
+### 2. Release Pipeline (`.github/workflows/release.yml`)
+* **Trigger:** Pushing a version tag matching `v*` (e.g., `v1.0.0`, `v1.1.0`, `v0.1.0-alpha`), typically initiated via `scripts/bump.sh`.
+* **Permissions:** `contents: write` (grants permission to publish releases and upload asset files).
+* **Pipeline Steps:**
+  1. **Full History Checkout:** Clones the repository with `fetch-depth: 0` so `git describe` and `scripts/changelog.sh` have access to the complete history of tags and commits.
+  2. **SDK Setup & Tooling Restore:** Configures .NET 10.0.x SDK and runs `dotnet restore` and `dotnet tool restore` (installing local CLI tools such as Swashbuckle CLI).
+  3. **Build:** Compiles the solution with `dotnet build`.
+  4. **OpenAPI Contract Generation:** Extracts the versioned API specification directly from the compiled assembly without needing a running server:
+     ```bash
+     dotnet swagger tofile --output openapi.json BookingService.Api/bin/Debug/net10.0/BookingService.Api.dll v1
+     ```
+  5. **Changelog Generation:** Runs `bash scripts/changelog.sh "${{ github.ref_name }}" > release-notes.md` to parse Conventional Commits since the previous release.
+  6. **GitHub Release Publication:** Uses the GitHub CLI (`gh release create`) authenticated with `GH_TOKEN: ${{ github.token }}` to publish the release titled with the tag name, embedding the release notes in the body, and attaching `openapi.json` as an asset.
