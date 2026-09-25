@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace BookingService.Api.Dtos;
 
 public record TicketDto(
@@ -6,5 +8,5 @@ public record TicketDto(
     string FullName,
     string Email,
     string TicketCode,
-    DateTime CreatedAtUtc
+    [property: JsonPropertyName("createdAt")] DateTime CreatedAtUtc
 );

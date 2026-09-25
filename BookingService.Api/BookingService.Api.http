@@ -12,12 +12,12 @@ Accept: application/json
 GET {{BookingService.Api_HostAddress}}/swagger/v1/swagger.json
 Accept: application/json
 
-### 4. (Preview) Ticket purchase endpoint template
-# POST {{BookingService.Api_HostAddress}}/events/11111111-1111-1111-1111-111111111111/tickets
-# Content-Type: application/json
-# X-Idempotency-Key: 11111111-2222-3333-4444-555555555555
-#
-# {
-#   "fullName": "Jane Doe",
-#   "email": "jane.doe@example.com"
-# }
+### 3. Ticket purchase endpoint (SP-05 / MVP-02)
+POST {{BookingService.Api_HostAddress}}/events/11111111-1111-1111-1111-111111111111/tickets
+Content-Type: application/json
+X-Idempotency-Key: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+
+{
+  "fullName": "Jane Doe",
+  "email": "jane.doe@example.com"
+}
