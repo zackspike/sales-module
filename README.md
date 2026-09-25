@@ -20,6 +20,7 @@ booking-service/
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
 ├── BookingService.Domain/         # Core business entities (Ticket, Event), value objects, domain rules
 ├── BookingService.Infrastructure/ # In-memory store implementation (ConcurrentDictionary), persistence
+├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
 ├── .agents/                       # Agent workflows, specifications (Notion), and MCP integrations
 ├── AGENTS.md                      # Global architecture rules & agent workflow protocol
 └── BookingService.slnx            # Solution file
@@ -113,3 +114,52 @@ We follow a structured branching model based on `main` and `dev` branches:
 
 4. **Merge to `main`:**
    * Once all features of the sprint/MVP are verified in `dev`, a Pull Request from `dev` to `main` is created for final release.
+
+---
+
+## Release & Versioning Scripts
+
+The repository includes automation scripts in `scripts/` to manage Conventional Commit changelogs and automated semantic version releases:
+
+### Prerequisites
+* Bash environment (Git Bash, WSL, Linux, or macOS). Both scripts require LF line endings.
+* [GitHub CLI (`gh`)](https://cli.github.com) authenticated (`gh auth login`).
+* .NET SDK installed (for automated preflight verification with `dotnet test`).
+
+### 1. Changelog Generation (`scripts/changelog.sh`)
+Generates Markdown release notes from Conventional Commits since the previous stable release tag:
+
+```bash
+# Preview release notes for upcoming release against HEAD
+bash scripts/changelog.sh HEAD
+
+# Generate release notes for an existing tag
+bash scripts/changelog.sh v1.0.0
+```
+
+### 2. Version Bump & Release Tagging (`scripts/bump.sh`)
+Calculates the next semantic version, runs preflight validations, creates an annotated git tag, and pushes it to `origin` (triggering the release workflow):
+
+```bash
+# Interactive mode (checks status, displays version choices, prompts confirmation)
+bash scripts/bump.sh
+
+# Direct bump with auto-confirmation
+bash scripts/bump.sh --patch -y
+bash scripts/bump.sh --minor -y
+bash scripts/bump.sh --major -y
+
+# Pre-release tag
+bash scripts/bump.sh --alpha
+bash scripts/bump.sh --beta
+
+# Dry run (inspect next version calculation without modifying or pushing tags)
+bash scripts/bump.sh --dry-run
+```
+
+#### Preflight Checks Performed by `bump.sh`:
+1. Current branch is `main`.
+2. Working tree is clean (no modified, staged, or untracked files).
+3. Local `main` branch is up to date with `origin/main`.
+4. CI workflow (`validation.yml`) passed on GitHub for current commit (`HEAD`).
+5. Unit test suite passes locally (`dotnet test`).
