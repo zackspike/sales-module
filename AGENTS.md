@@ -125,7 +125,11 @@ API-specific configuration
 
 The API must not contain business rules.
 
+Standard endpoints include `GET /health` returning `{ "status": "ok" }` for health check and liveness/readiness probes.
+
 ### General Rules
+
+All code contributions must adhere to the rules defined in `.editorconfig` and pass `dotnet format --verify-no-changes`.
 
 Do not create abstractions without a concrete architectural reason.
 
@@ -172,7 +176,7 @@ When executing tasks or user requests, agents must follow the structured lifecyc
 
 3. **Audit & Verification Phase**:
    - Verify architectural boundaries and dependency directions.
-   - Run verification commands (`dotnet build`, `dotnet test`) when applicable.
+   - Run verification commands (`dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`) when applicable.
    - Document validation status and findings in `.agents/current/auditor-report.md`.
 
 Detailed role guidelines are defined in `.agents/agents/analyst/agent.md`, `.agents/agents/editor/agent.md`, and `.agents/agents/auditor/agent.md`.

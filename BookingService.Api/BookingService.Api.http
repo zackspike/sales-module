@@ -1,10 +1,14 @@
 @BookingService.Api_HostAddress = http://localhost:5283
 
-### 1. Health check / Root endpoint
+### 1. Health check endpoint (prerequisito 11)
+GET {{BookingService.Api_HostAddress}}/health
+Accept: application/json
+
+### 2. Root API status endpoint
 GET {{BookingService.Api_HostAddress}}/
 Accept: application/json
 
-### 2. Swagger OpenAPI Specification
+### 3. Swagger OpenAPI Specification
 GET {{BookingService.Api_HostAddress}}/swagger/v1/swagger.json
 Accept: application/json
 

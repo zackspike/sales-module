@@ -41,7 +41,18 @@ booking-service/
 
 3. **Explore the API:**
    * Swagger UI will be available at: `http://localhost:<port>/swagger` (in Development mode).
-   * Health check endpoint: `GET /`
+   * Health check endpoint: `GET /health` (returns `{ "status": "ok" }`).
+   * Root status endpoint: `GET /`.
+
+4. **Code Quality & Formatting:**
+   * Verify formatting (lint check):
+     ```bash
+     dotnet format --verify-no-changes
+     ```
+   * Automatically fix formatting:
+     ```bash
+     dotnet format
+     ```
 
 ---
 
@@ -83,6 +94,7 @@ We follow a structured branching model based on `main` and `dev` branches:
    ```bash
    dotnet build
    dotnet test
+   dotnet format --verify-no-changes
    ```
 
 3. **Open a Pull Request:**

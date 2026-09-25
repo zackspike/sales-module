@@ -1,5 +1,3 @@
-using System;
-
 namespace BookingService.Domain;
 
 public class Ticket
