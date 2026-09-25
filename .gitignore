@@ -489,3 +489,6 @@ $RECYCLE.BIN/
 .agents/plugins/**/mcp_config.json
 !.agents/plugins/**/mcp_config.example.json
 
+# OpenAPI generated files
+openapi.json
+openapi.yaml

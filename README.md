@@ -54,6 +54,16 @@ booking-service/
      dotnet format
      ```
 
+5. **Generate OpenAPI Specification (Contract):**
+   * Restore local tools:
+     ```bash
+     dotnet tool restore
+     ```
+   * Generate `openapi.json` from the compiled assembly without requiring a running server or browser:
+     ```bash
+     dotnet swagger tofile --output openapi.json BookingService.Api/bin/Debug/net10.0/BookingService.Api.dll v1
+     ```
+
 ---
 
 ## Branch Strategy
