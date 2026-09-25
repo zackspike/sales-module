@@ -1,14 +1,7 @@
 using BookingService.Api.Common;
 using BookingService.Api.Endpoints;
 using BookingService.Infrastructure;
-<<<<<<< HEAD
 using Microsoft.OpenApi;
-=======
-using BookingService.Infrastructure.Repositories;
-using BookingService.Application.Repositories;
-using BookingService.Application.Tickets;
-using BookingService.Api.Common;
->>>>>>> 82c24c8eb6b9c9271270f9077dbe8612fff2f605
 
 var builder = WebApplication.CreateBuilder(args);
 
