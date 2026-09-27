@@ -17,6 +17,7 @@ The repository follows Domain-Driven Design and Clean Architecture principles:
 ```text
 booking-service/
 ├── .github/workflows/             # CI/CD and release pipelines (validation.yml, release.yml)
+├── .githooks/                     # Git hooks enforcing Conventional Commits (commit-msg)
 ├── BookingService.Api/            # Minimal APIs, endpoints, middleware, HTTP models
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
 ├── BookingService.Domain/         # Core business entities (Ticket, Event), value objects, domain rules
@@ -31,12 +32,17 @@ booking-service/
 
 ## How to Run Locally
 
-1. **Restore dependencies and build:**
+1. **Configure Git hooks (Conventional Commits):**
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+
+2. **Restore dependencies and build:**
    ```bash
    dotnet build
    ```
 
-2. **Run the API:**
+3. **Run the API:**
    ```bash
    dotnet run --project BookingService.Api
    ```

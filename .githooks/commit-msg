@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Git commit-msg hook to enforce Conventional Commits
+
+commit_msg_file="$1"
+first_line=$(head -n 1 "$commit_msg_file")
+
+# Allow merge commits
+if [[ "$first_line" =~ ^Merge[[:space:]] ]]; then
+    exit 0
+fi
+
+# Allow automatic revert commits
+if [[ "$first_line" =~ ^Revert[[:space:]] ]]; then
+    exit 0
+fi
+
+# Conventional Commits regex
+conventional_regex='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_./-]+\))?(!)?:[[:space:]].+'
+
+if ! [[ "$first_line" =~ $conventional_regex ]]; then
+    echo "" >&2
+    echo "❌ [ERROR] Formato de commit inválido." >&2
+    echo "--------------------------------------------------" >&2
+    echo "Tu mensaje:" >&2
+    echo "  \"$first_line\"" >&2
+    echo "" >&2
+    echo "Los commits deben seguir la especificación de Conventional Commits:" >&2
+    echo "  <tipo>(<ámbito opcional>): <descripción>" >&2
+    echo "" >&2
+    echo "Tipos permitidos: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert" >&2
+    echo "" >&2
+    echo "Ejemplos válidos:" >&2
+    echo "  feat(api): agregar endpoint de healthcheck" >&2
+    echo "  fix(tests): corregir aserción de fecha" >&2
+    echo "  chore: actualizar dependencias" >&2
+    echo "--------------------------------------------------" >&2
+    exit 1
+fi
+
+exit 0

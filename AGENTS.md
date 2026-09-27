@@ -142,6 +142,8 @@ dotnet swagger tofile --output openapi.json BookingService.Api/bin/Debug/net10.0
 
 All code contributions must adhere to the rules defined in `.editorconfig` and pass `dotnet format --verify-no-changes`.
 
+All commit messages must strictly follow the [Conventional Commits](https://www.conventionalcommits.org/) format (`feat:`, `fix:`, `chore:`, etc.), enforced locally via `.githooks/commit-msg`.
+
 Do not create abstractions without a concrete architectural reason.
 
 Do not move business logic into Infrastructure or API.
