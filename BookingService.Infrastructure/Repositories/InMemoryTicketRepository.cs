@@ -29,6 +29,30 @@ public class InMemoryTicketRepository : ITicketRepository
         }
     }
 
+    public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase)
+    {
+        lock (_lock)
+        {
+            // The key check, the availability check done by `purchase` and the key registration
+            // share one critical section: of two concurrent buyers of the same seat only one can
+            // see it available, and a retried request can't buy a second seat.
+            if (_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var existingTicketId))
+            {
+                return new TicketPurchaseOutcome(_tickets.First(t => t.Id == existingTicketId), Replayed: true);
+            }
+
+            var ticket = _tickets.FirstOrDefault(t => t.Id == ticketId && t.EventId == eventId);
+            if (ticket is null)
+            {
+                return new TicketPurchaseOutcome(null, Replayed: false);
+            }
+
+            purchase(ticket);
+            _ticketIdsByIdempotencyKey[idempotencyKey] = ticket.Id;
+            return new TicketPurchaseOutcome(ticket, Replayed: false);
+        }
+    }
+
     public Ticket? GetById(Guid id)
     {
         lock (_lock)

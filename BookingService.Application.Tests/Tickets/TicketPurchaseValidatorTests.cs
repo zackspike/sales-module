@@ -13,7 +13,7 @@ public class TicketPurchaseValidatorTests
     [Fact]
     public void Valid_request_for_existing_event_is_valid()
     {
-        var result = _validator.Validate(new(KnownEventId, "Juan Perez", "juan.perez@example.com"));
+        var result = _validator.Validate(Command(KnownEventId, "Juan Perez", "juan.perez@example.com"));
 
         Assert.True(result.IsValid);
         Assert.Empty(result.Errors);
@@ -25,7 +25,7 @@ public class TicketPurchaseValidatorTests
     [InlineData("   ")]
     public void Missing_full_name_is_invalid(string? fullName)
     {
-        var result = _validator.Validate(new(KnownEventId, fullName, "juan.perez@example.com"));
+        var result = _validator.Validate(Command(KnownEventId, fullName, "juan.perez@example.com"));
 
         Assert.Equal(TicketPurchaseValidationStatus.Invalid, result.Status);
         Assert.Equal(["fullName"], result.Errors.Keys);
@@ -37,7 +37,7 @@ public class TicketPurchaseValidatorTests
     [InlineData("   ")]
     public void Missing_email_is_invalid(string? email)
     {
-        var result = _validator.Validate(new(KnownEventId, "Juan Perez", email));
+        var result = _validator.Validate(Command(KnownEventId, "Juan Perez", email));
 
         Assert.Equal(TicketPurchaseValidationStatus.Invalid, result.Status);
         Assert.Equal(["email"], result.Errors.Keys);
@@ -52,7 +52,7 @@ public class TicketPurchaseValidatorTests
     [InlineData("a@b.com, c@d.com")]
     public void Malformed_email_is_invalid(string email)
     {
-        var result = _validator.Validate(new(KnownEventId, "Juan Perez", email));
+        var result = _validator.Validate(Command(KnownEventId, "Juan Perez", email));
 
         Assert.Equal(TicketPurchaseValidationStatus.Invalid, result.Status);
         Assert.Equal(["email"], result.Errors.Keys);
@@ -63,7 +63,7 @@ public class TicketPurchaseValidatorTests
     {
         var email = new string('a', 250) + "@b.co";
 
-        var result = _validator.Validate(new(KnownEventId, "Juan Perez", email));
+        var result = _validator.Validate(Command(KnownEventId, "Juan Perez", email));
 
         Assert.Equal(TicketPurchaseValidationStatus.Invalid, result.Status);
         Assert.Contains("email", result.Errors.Keys);
@@ -72,7 +72,7 @@ public class TicketPurchaseValidatorTests
     [Fact]
     public void Email_with_surrounding_whitespace_is_accepted()
     {
-        var result = _validator.Validate(new(KnownEventId, "Juan Perez", " juan.perez@example.com "));
+        var result = _validator.Validate(Command(KnownEventId, "Juan Perez", " juan.perez@example.com "));
 
         Assert.True(result.IsValid);
     }
@@ -80,7 +80,7 @@ public class TicketPurchaseValidatorTests
     [Fact]
     public void All_failing_fields_are_reported_together()
     {
-        var result = _validator.Validate(new(KnownEventId, null, "not-an-email"));
+        var result = _validator.Validate(Command(KnownEventId, null, "not-an-email"));
 
         Assert.Equal(TicketPurchaseValidationStatus.Invalid, result.Status);
         Assert.Equal(["email", "fullName"], result.Errors.Keys.Order());
@@ -89,7 +89,7 @@ public class TicketPurchaseValidatorTests
     [Fact]
     public void Unknown_event_with_valid_body_is_not_found()
     {
-        var result = _validator.Validate(new(UnknownEventId, "Juan Perez", "juan.perez@example.com"));
+        var result = _validator.Validate(Command(UnknownEventId, "Juan Perez", "juan.perez@example.com"));
 
         Assert.Equal(TicketPurchaseValidationStatus.EventNotFound, result.Status);
         Assert.Empty(result.Errors);
@@ -98,10 +98,13 @@ public class TicketPurchaseValidatorTests
     [Fact]
     public void Invalid_body_wins_over_unknown_event()
     {
-        var result = _validator.Validate(new(UnknownEventId, "", "juan.perez@example.com"));
+        var result = _validator.Validate(Command(UnknownEventId, "", "juan.perez@example.com"));
 
         Assert.Equal(TicketPurchaseValidationStatus.Invalid, result.Status);
     }
+
+    private static PurchaseTicketCommand Command(Guid eventId, string? fullName, string? email) =>
+        new(eventId, Guid.NewGuid(), fullName, email, Guid.NewGuid());
 
     private sealed class FakeEventCatalog(params Guid[] knownEvents) : IEventCatalog
     {
