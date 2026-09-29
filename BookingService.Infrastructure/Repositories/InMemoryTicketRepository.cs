@@ -5,7 +5,10 @@ namespace BookingService.Infrastructure.Repositories;
 
 public class InMemoryTicketRepository : ITicketRepository
 {
-    private readonly List<Ticket> _tickets = new();
+    // Tickets grouped by event (eventId -> ticketId -> ticket), plus a ticketId -> eventId index
+    // so lookups by ticket id alone stay O(1).
+    private readonly Dictionary<Guid, Dictionary<Guid, Ticket>> _ticketsByEvent = new();
+    private readonly Dictionary<Guid, Guid> _eventIdsByTicketId = new();
     private readonly Dictionary<Guid, Guid> _ticketIdsByIdempotencyKey = new();
     private readonly Lock _lock = new();
 
@@ -19,10 +22,11 @@ public class InMemoryTicketRepository : ITicketRepository
             if (_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var existingTicketId))
             {
                 wasCreated = false;
-                return _tickets.First(t => t.Id == existingTicketId);
+                return FindById(existingTicketId)
+                    ?? throw new InvalidOperationException($"Ticket with id '{existingTicketId}' was removed.");
             }
 
-            _tickets.Add(ticket);
+            Store(ticket);
             _ticketIdsByIdempotencyKey[idempotencyKey] = ticket.Id;
             wasCreated = true;
             return ticket;
@@ -57,7 +61,7 @@ public class InMemoryTicketRepository : ITicketRepository
     {
         lock (_lock)
         {
-            return _tickets.FirstOrDefault(t => t.Id == id);
+            return FindById(id);
         }
     }
 
@@ -65,7 +69,7 @@ public class InMemoryTicketRepository : ITicketRepository
     {
         lock (_lock)
         {
-            return _tickets.ToList();
+            return _ticketsByEvent.Values.SelectMany(eventTickets => eventTickets.Values).ToList();
         }
     }
 
@@ -73,13 +77,14 @@ public class InMemoryTicketRepository : ITicketRepository
     {
         lock (_lock)
         {
-            var index = _tickets.FindIndex(t => t.Id == ticket.Id);
-            if (index == -1)
+            if (!_eventIdsByTicketId.ContainsKey(ticket.Id))
             {
                 throw new KeyNotFoundException($"Ticket with id '{ticket.Id}' was not found.");
             }
 
-            _tickets[index] = ticket;
+            // Removing first keeps the grouping right if the ticket's EventId changed.
+            RemoveStored(ticket.Id);
+            Store(ticket);
         }
 
         return ticket;
@@ -89,8 +94,45 @@ public class InMemoryTicketRepository : ITicketRepository
     {
         lock (_lock)
         {
-            var ticket = _tickets.FirstOrDefault(t => t.Id == id);
-            return ticket is not null && _tickets.Remove(ticket);
+            return RemoveStored(id);
         }
+    }
+
+    // The helpers below assume the caller holds _lock.
+
+    private Ticket? FindById(Guid id)
+    {
+        return _eventIdsByTicketId.TryGetValue(id, out var eventId)
+            ? _ticketsByEvent[eventId][id]
+            : null;
+    }
+
+    private void Store(Ticket ticket)
+    {
+        if (!_ticketsByEvent.TryGetValue(ticket.EventId, out var eventTickets))
+        {
+            eventTickets = new Dictionary<Guid, Ticket>();
+            _ticketsByEvent[ticket.EventId] = eventTickets;
+        }
+
+        eventTickets[ticket.Id] = ticket;
+        _eventIdsByTicketId[ticket.Id] = ticket.EventId;
+    }
+
+    private bool RemoveStored(Guid id)
+    {
+        if (!_eventIdsByTicketId.Remove(id, out var eventId))
+        {
+            return false;
+        }
+
+        var eventTickets = _ticketsByEvent[eventId];
+        eventTickets.Remove(id);
+        if (eventTickets.Count == 0)
+        {
+            _ticketsByEvent.Remove(eventId);
+        }
+
+        return true;
     }
 }
