@@ -42,10 +42,12 @@ public class InMemoryTicketRepository : ITicketRepository
             // see it available, and a retried request can't buy a second seat.
             if (_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var existingTicketId))
             {
-                return new TicketPurchaseOutcome(_tickets.First(t => t.Id == existingTicketId), Replayed: true);
+                return new TicketPurchaseOutcome(FindById(existingTicketId)!, Replayed: true);
             }
 
-            var ticket = _tickets.FirstOrDefault(t => t.Id == ticketId && t.EventId == eventId);
+            var ticket = _ticketsByEvent.TryGetValue(eventId, out var eventTickets)
+                ? eventTickets.GetValueOrDefault(ticketId)
+                : null;
             if (ticket is null)
             {
                 return new TicketPurchaseOutcome(null, Replayed: false);
