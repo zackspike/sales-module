@@ -127,9 +127,22 @@ The API must not contain business rules.
 
 Standard endpoints include `GET /health` returning `{ "status": "ok" }` for health check and liveness/readiness probes.
 
+### OpenAPI Contract Generation
+
+The OpenAPI specification (`openapi.json`) must be generated directly from the compiled assembly without requiring a running web server or browser:
+
+```bash
+dotnet tool restore
+dotnet swagger tofile --output openapi.json BookingService.Api/bin/Debug/net10.0/BookingService.Api.dll v1
+```
+
+*(Note: Prior compilation via `dotnet build` is required to produce `BookingService.Api/bin/Debug/net10.0/BookingService.Api.dll`).*
+
 ### General Rules
 
 All code contributions must adhere to the rules defined in `.editorconfig` and pass `dotnet format --verify-no-changes`.
+
+All commit messages must strictly follow the [Conventional Commits](https://www.conventionalcommits.org/) format (`feat:`, `fix:`, `chore:`, etc.), enforced locally via `.githooks/commit-msg`.
 
 Do not create abstractions without a concrete architectural reason.
 
@@ -176,7 +189,7 @@ When executing tasks or user requests, agents must follow the structured lifecyc
 
 3. **Audit & Verification Phase**:
    - Verify architectural boundaries and dependency directions.
-   - Run verification commands (`dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`) when applicable.
+   - Run verification commands (`dotnet build`, `dotnet test`, `dotnet format --verify-no-changes`, and OpenAPI generation) when applicable.
    - Document validation status and findings in `.agents/current/auditor-report.md`.
 
 Detailed role guidelines are defined in `.agents/agents/analyst/agent.md`, `.agents/agents/editor/agent.md`, and `.agents/agents/auditor/agent.md`.

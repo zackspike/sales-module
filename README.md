@@ -16,10 +16,13 @@ The repository follows Domain-Driven Design and Clean Architecture principles:
 
 ```text
 booking-service/
+├── .github/workflows/             # CI/CD and release pipelines (validation.yml, release.yml)
+├── .githooks/                     # Git hooks enforcing Conventional Commits (commit-msg)
 ├── BookingService.Api/            # Minimal APIs, endpoints, middleware, HTTP models
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
 ├── BookingService.Domain/         # Core business entities (Ticket, Event), value objects, domain rules
 ├── BookingService.Infrastructure/ # In-memory store implementation (ConcurrentDictionary), persistence
+├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
 ├── .agents/                       # Agent workflows, specifications (Notion), and MCP integrations
 ├── AGENTS.md                      # Global architecture rules & agent workflow protocol
 └── BookingService.slnx            # Solution file
@@ -29,12 +32,17 @@ booking-service/
 
 ## How to Run Locally
 
-1. **Restore dependencies and build:**
+1. **Configure Git hooks (Conventional Commits):**
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+
+2. **Restore dependencies and build:**
    ```bash
    dotnet build
    ```
 
-2. **Run the API:**
+3. **Run the API:**
    ```bash
    dotnet run --project BookingService.Api
    ```
@@ -52,6 +60,16 @@ booking-service/
    * Automatically fix formatting:
      ```bash
      dotnet format
+     ```
+
+5. **Generate OpenAPI Specification (Contract):**
+   * Restore local tools:
+     ```bash
+     dotnet tool restore
+     ```
+   * Generate `openapi.json` from the compiled assembly without requiring a running server or browser:
+     ```bash
+     dotnet swagger tofile --output openapi.json BookingService.Api/bin/Debug/net10.0/BookingService.Api.dll v1
      ```
 
 ---
@@ -103,3 +121,78 @@ We follow a structured branching model based on `main` and `dev` branches:
 
 4. **Merge to `main`:**
    * Once all features of the sprint/MVP are verified in `dev`, a Pull Request from `dev` to `main` is created for final release.
+
+---
+
+## Release & Versioning Scripts
+
+The repository includes automation scripts in `scripts/` to manage Conventional Commit changelogs and automated semantic version releases:
+
+### Prerequisites
+* Bash environment (Git Bash, WSL, Linux, or macOS). Both scripts require LF line endings.
+* [GitHub CLI (`gh`)](https://cli.github.com) authenticated (`gh auth login`).
+* .NET SDK installed (for automated preflight verification with `dotnet test`).
+
+### 1. Changelog Generation (`scripts/changelog.sh`)
+Generates Markdown release notes from Conventional Commits since the previous stable release tag:
+
+```bash
+# Preview release notes for upcoming release against HEAD
+bash scripts/changelog.sh HEAD
+
+# Generate release notes for an existing tag
+bash scripts/changelog.sh v1.0.0
+```
+
+### 2. Version Bump & Release Tagging (`scripts/bump.sh`)
+Calculates the next semantic version, runs preflight validations, creates an annotated git tag, and pushes it to `origin` (triggering the release workflow):
+
+```bash
+# Interactive mode (checks status, displays version choices, prompts confirmation)
+bash scripts/bump.sh
+
+# Direct bump with auto-confirmation
+bash scripts/bump.sh --patch -y
+bash scripts/bump.sh --minor -y
+bash scripts/bump.sh --major -y
+
+# Pre-release tag
+bash scripts/bump.sh --alpha
+bash scripts/bump.sh --beta
+
+# Dry run (inspect next version calculation without modifying or pushing tags)
+bash scripts/bump.sh --dry-run
+```
+
+#### Preflight Checks Performed by `bump.sh`:
+1. Current branch is `main`.
+2. Working tree is clean (no modified, staged, or untracked files).
+3. Local `main` branch is up to date with `origin/main`.
+4. CI workflow (`validation.yml`) passed on GitHub for current commit (`HEAD`).
+5. Unit test suite passes locally (`dotnet test`).
+
+---
+
+## CI/CD & Automated Pipelines
+
+The repository features automated GitHub Actions workflows to guarantee code quality and automate releases:
+
+### 1. PR & Validation Pipeline (`.github/workflows/validation.yml`)
+* **Trigger:** Pull Requests and pushes to `main` and `dev`.
+* **Jobs:**
+  * **Code Quality & Linting:** Enforces C# styling via `dotnet format --verify-no-changes`.
+  * **Tests:** Restores dependencies and runs unit tests via `dotnet test`.
+
+### 2. Release Pipeline (`.github/workflows/release.yml`)
+* **Trigger:** Pushing a version tag matching `v*` (e.g., `v1.0.0`, `v1.1.0`, `v0.1.0-alpha`), typically initiated via `scripts/bump.sh`.
+* **Permissions:** `contents: write` (grants permission to publish releases and upload asset files).
+* **Pipeline Steps:**
+  1. **Full History Checkout:** Clones the repository with `fetch-depth: 0` so `git describe` and `scripts/changelog.sh` have access to the complete history of tags and commits.
+  2. **SDK Setup & Tooling Restore:** Configures .NET 10.0.x SDK and runs `dotnet restore` and `dotnet tool restore` (installing local CLI tools such as Swashbuckle CLI).
+  3. **Build:** Compiles the solution with `dotnet build`.
+  4. **OpenAPI Contract Generation:** Extracts the versioned API specification directly from the compiled assembly without needing a running server:
+     ```bash
+     dotnet swagger tofile --output openapi.json BookingService.Api/bin/Debug/net10.0/BookingService.Api.dll v1
+     ```
+  5. **Changelog Generation:** Runs `bash scripts/changelog.sh "${{ github.ref_name }}" > release-notes.md` to parse Conventional Commits since the previous release.
+  6. **GitHub Release Publication:** Uses the GitHub CLI (`gh release create`) authenticated with `GH_TOKEN: ${{ github.token }}` to publish the release titled with the tag name, embedding the release notes in the body, and attaching `openapi.json` as an asset.
