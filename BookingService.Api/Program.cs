@@ -33,6 +33,7 @@ builder.Services.AddSingleton<BookingMemoryStore>();
 builder.Services.AddSingleton<ITicketRepository, InMemoryTicketRepository>();
 builder.Services.AddSingleton<IEventCatalog, InMemoryEventCatalog>();
 builder.Services.AddTransient<TicketPurchaseValidator>();
+builder.Services.AddTransient<PurchaseTicketHandler>();
 
 var app = builder.Build();
 

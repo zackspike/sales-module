@@ -33,55 +33,29 @@ public class InMemoryTicketRepository : ITicketRepository
         }
     }
 
-    public void AddRange(Guid eventId, IEnumerable<Ticket> tickets)
+    public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase)
     {
-        var batch = tickets.ToList();
-
         lock (_lock)
         {
-            // Validate the whole batch before storing anything, so a bad ticket leaves the
-            // event inventory untouched.
-            var batchIds = new HashSet<Guid>();
-            foreach (var ticket in batch)
+            // The key check, the availability check done by `purchase` and the key registration
+            // share one critical section: of two concurrent buyers of the same seat only one can
+            // see it available, and a retried request can't buy a second seat.
+            if (_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var existingTicketId))
             {
-                if (ticket.EventId != eventId)
-                {
-                    throw new ArgumentException(
-                        $"Ticket '{ticket.Id}' belongs to event '{ticket.EventId}', not '{eventId}'.",
-                        nameof(tickets));
-                }
-
-                if (_eventIdsByTicketId.ContainsKey(ticket.Id) || !batchIds.Add(ticket.Id))
-                {
-                    throw new ArgumentException($"Ticket with id '{ticket.Id}' already exists.", nameof(tickets));
-                }
+                return new TicketPurchaseOutcome(FindById(existingTicketId)!, Replayed: true);
             }
 
-            foreach (var ticket in batch)
+            var ticket = _ticketsByEvent.TryGetValue(eventId, out var eventTickets)
+                ? eventTickets.GetValueOrDefault(ticketId)
+                : null;
+            if (ticket is null)
             {
-                Store(ticket);
+                return new TicketPurchaseOutcome(null, Replayed: false);
             }
-        }
-    }
 
-    public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId)
-    {
-        lock (_lock)
-        {
-            return _ticketsByEvent.TryGetValue(eventId, out var eventTickets)
-                ? eventTickets.Values.ToList()
-                : [];
-        }
-    }
-
-    public Ticket? GetById(Guid eventId, Guid ticketId)
-    {
-        lock (_lock)
-        {
-            return _ticketsByEvent.TryGetValue(eventId, out var eventTickets)
-                && eventTickets.TryGetValue(ticketId, out var ticket)
-                    ? ticket
-                    : null;
+            purchase(ticket);
+            _ticketIdsByIdempotencyKey[idempotencyKey] = ticket.Id;
+            return new TicketPurchaseOutcome(ticket, Replayed: false);
         }
     }
 
