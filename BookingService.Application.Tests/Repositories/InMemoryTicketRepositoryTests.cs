@@ -151,6 +151,22 @@ public class InMemoryTicketRepositoryTests
         Assert.Equal(1000, _repository.GetAll().Count);
     }
 
+    [Fact]
+    public void SeedDefaultInventory_creates_50_available_seats_for_default_event()
+    {
+        var seededRepository = new InMemoryTicketRepository(seedDefaultInventory: true);
+        var seats = seededRepository.GetByEvent(RockFestId);
+
+        Assert.Equal(50, seats.Count);
+        Assert.All(seats, s =>
+        {
+            Assert.Equal(RockFestId, s.EventId);
+            Assert.Equal(TicketStatus.Available, s.Status);
+        });
+        Assert.Equal("A-1", seats.First().SeatNumber);
+        Assert.Equal("A-50", seats.Last().SeatNumber);
+    }
+
     private static Ticket[] Seats(Guid eventId, int count) =>
         Enumerable.Range(1, count)
             .Select(number => new Ticket { Id = Guid.NewGuid(), EventId = eventId, SeatNumber = $"A-{number}" })
