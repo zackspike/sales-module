@@ -33,6 +33,58 @@ public class InMemoryTicketRepository : ITicketRepository
         }
     }
 
+    public void AddRange(Guid eventId, IEnumerable<Ticket> tickets)
+    {
+        var batch = tickets.ToList();
+
+        lock (_lock)
+        {
+            // Validate the whole batch before storing anything, so a bad ticket leaves the
+            // event inventory untouched.
+            var batchIds = new HashSet<Guid>();
+            foreach (var ticket in batch)
+            {
+                if (ticket.EventId != eventId)
+                {
+                    throw new ArgumentException(
+                        $"Ticket '{ticket.Id}' belongs to event '{ticket.EventId}', not '{eventId}'.",
+                        nameof(tickets));
+                }
+
+                if (_eventIdsByTicketId.ContainsKey(ticket.Id) || !batchIds.Add(ticket.Id))
+                {
+                    throw new ArgumentException($"Ticket with id '{ticket.Id}' already exists.", nameof(tickets));
+                }
+            }
+
+            foreach (var ticket in batch)
+            {
+                Store(ticket);
+            }
+        }
+    }
+
+    public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId)
+    {
+        lock (_lock)
+        {
+            return _ticketsByEvent.TryGetValue(eventId, out var eventTickets)
+                ? eventTickets.Values.ToList()
+                : [];
+        }
+    }
+
+    public Ticket? GetById(Guid eventId, Guid ticketId)
+    {
+        lock (_lock)
+        {
+            return _ticketsByEvent.TryGetValue(eventId, out var eventTickets)
+                && eventTickets.TryGetValue(ticketId, out var ticket)
+                    ? ticket
+                    : null;
+        }
+    }
+
     public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase)
     {
         lock (_lock)
