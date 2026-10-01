@@ -1,5 +1,3 @@
-using BookingService.Domain.Events;
-
 namespace BookingService.Application.Abstractions;
 
 /// <summary>
@@ -9,6 +7,4 @@ namespace BookingService.Application.Abstractions;
 public interface IEventCatalog
 {
     bool Exists(Guid eventId);
-    Event? GetById(Guid eventId) => null;
-    IReadOnlyCollection<Event> GetAll() => [];
 }

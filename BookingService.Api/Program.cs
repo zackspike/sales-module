@@ -1,10 +1,7 @@
 using BookingService.Api.Endpoints;
 using BookingService.Api.Middleware;
-using BookingService.Application.Abstractions;
-using BookingService.Application.Tickets.Commands;
-using BookingService.Application.Tickets.Queries;
+using BookingService.Application;
 using BookingService.Infrastructure;
-using BookingService.Infrastructure.Persistence;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,13 +27,9 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddSingleton<BookingMemoryStore>();
-builder.Services.AddSingleton<ITicketRepository>(_ => new InMemoryTicketRepository(seedDefaultInventory: true));
-builder.Services.AddSingleton<IEventCatalog>(_ => new InMemoryEventCatalog());
-builder.Services.AddTransient<TicketPurchaseValidator>();
-builder.Services.AddTransient<PurchaseTicketHandler>();
-builder.Services.AddTransient<GetAvailableTicketsHandler>();
-builder.Services.AddTransient<CheckTicketAvailabilityHandler>();
+builder.Services
+    .AddApplication()
+    .AddInfrastructure();
 
 var app = builder.Build();
 
@@ -46,11 +39,6 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-
-    app.MapGet("/test/error", () =>
-    {
-        throw new InvalidOperationException("Simulation of an unhandled error.");
-    });
 }
 
 app.UseCors();
@@ -59,6 +47,6 @@ app.MapGet("/", () => Results.Ok(new { status = "BookingService API Online", ver
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-app.MapBookingEndpoints();
+app.MapTicketEndpoints();
 
 app.Run();

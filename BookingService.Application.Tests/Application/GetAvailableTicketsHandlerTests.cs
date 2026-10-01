@@ -67,14 +67,8 @@ public class GetAvailableTicketsHandlerTests
 
         public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId) =>
             _tickets.Where(t => t.EventId == eventId).ToList();
-
-        public Ticket GetOrAdd(Guid idempotencyKey, Ticket ticket, out bool wasCreated) => throw new NotSupportedException();
         public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
         public Ticket? GetById(Guid eventId, Guid ticketId) => throw new NotSupportedException();
-        public Ticket? GetById(Guid id) => throw new NotSupportedException();
-        public IReadOnlyCollection<Ticket> GetAll() => throw new NotSupportedException();
-        public Ticket Update(Ticket ticket) => throw new NotSupportedException();
-        public bool Remove(Guid id) => throw new NotSupportedException();
         public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase) => throw new NotSupportedException();
     }
 }

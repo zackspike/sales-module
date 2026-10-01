@@ -21,32 +21,11 @@ public class InMemoryTicketRepository : ITicketRepository
         }
     }
 
-    public void SeedDefaultInventory()
+    private void SeedDefaultInventory()
     {
         var defaultEvent = InMemoryEventCatalog.DefaultEvent;
         var initialSeats = EventInventoryFactory.CreateInitialInventory(defaultEvent);
         AddRange(defaultEvent.Id, initialSeats);
-    }
-
-    public Ticket GetOrAdd(Guid idempotencyKey, Ticket ticket, out bool wasCreated)
-    {
-        lock (_lock)
-        {
-            // Both the lookup and the insert happen under the same lock, so two concurrent
-            // requests carrying the same idempotency key can't each slip past the check and
-            // create their own ticket.
-            if (_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var existingTicketId))
-            {
-                wasCreated = false;
-                return FindById(existingTicketId)
-                    ?? throw new InvalidOperationException($"Ticket with id '{existingTicketId}' was removed.");
-            }
-
-            Store(ticket);
-            _ticketIdsByIdempotencyKey[idempotencyKey] = ticket.Id;
-            wasCreated = true;
-            return ticket;
-        }
     }
 
     public void AddRange(Guid eventId, IEnumerable<Ticket> tickets)
@@ -127,47 +106,6 @@ public class InMemoryTicketRepository : ITicketRepository
         }
     }
 
-    public Ticket? GetById(Guid id)
-    {
-        lock (_lock)
-        {
-            return FindById(id);
-        }
-    }
-
-    public IReadOnlyCollection<Ticket> GetAll()
-    {
-        lock (_lock)
-        {
-            return _ticketsByEvent.Values.SelectMany(eventTickets => eventTickets.Values).ToList();
-        }
-    }
-
-    public Ticket Update(Ticket ticket)
-    {
-        lock (_lock)
-        {
-            if (!_eventIdsByTicketId.ContainsKey(ticket.Id))
-            {
-                throw new KeyNotFoundException($"Ticket with id '{ticket.Id}' was not found.");
-            }
-
-            // Removing first keeps the grouping right if the ticket's EventId changed.
-            RemoveStored(ticket.Id);
-            Store(ticket);
-        }
-
-        return ticket;
-    }
-
-    public bool Remove(Guid id)
-    {
-        lock (_lock)
-        {
-            return RemoveStored(id);
-        }
-    }
-
     // The helpers below assume the caller holds _lock.
 
     private Ticket? FindById(Guid id)
@@ -187,22 +125,5 @@ public class InMemoryTicketRepository : ITicketRepository
 
         eventTickets[ticket.Id] = ticket;
         _eventIdsByTicketId[ticket.Id] = ticket.EventId;
-    }
-
-    private bool RemoveStored(Guid id)
-    {
-        if (!_eventIdsByTicketId.Remove(id, out var eventId))
-        {
-            return false;
-        }
-
-        var eventTickets = _ticketsByEvent[eventId];
-        eventTickets.Remove(id);
-        if (eventTickets.Count == 0)
-        {
-            _ticketsByEvent.Remove(eventId);
-        }
-
-        return true;
     }
 }

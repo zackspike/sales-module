@@ -21,7 +21,6 @@ public class InMemoryTicketRepositoryTests
 
         Assert.Equal(rockSeats.Select(t => t.Id).Order(), _repository.GetByEvent(RockFestId).Select(t => t.Id).Order());
         Assert.Equal(jazzSeats.Select(t => t.Id).Order(), _repository.GetByEvent(JazzNightId).Select(t => t.Id).Order());
-        Assert.Equal(5, _repository.GetAll().Count);
     }
 
     [Fact]
@@ -60,7 +59,6 @@ public class InMemoryTicketRepositoryTests
         Assert.Same(seat, _repository.GetById(RockFestId, seat.Id));
         Assert.Null(_repository.GetById(JazzNightId, seat.Id));
         Assert.Null(_repository.GetById(Guid.NewGuid(), seat.Id));
-        Assert.Same(seat, _repository.GetById(seat.Id));
     }
 
     [Fact]
@@ -69,7 +67,7 @@ public class InMemoryTicketRepositoryTests
         var batch = Seats(RockFestId, 2).Append(Seats(JazzNightId, 1)[0]);
 
         Assert.Throws<ArgumentException>(() => _repository.AddRange(RockFestId, batch));
-        Assert.Empty(_repository.GetAll());
+        Assert.Empty(_repository.GetByEvent(RockFestId));
     }
 
     [Fact]
@@ -90,54 +88,7 @@ public class InMemoryTicketRepositoryTests
         var seat = Seats(RockFestId, 1)[0];
 
         Assert.Throws<ArgumentException>(() => _repository.AddRange(RockFestId, [seat, seat]));
-        Assert.Empty(_repository.GetAll());
-    }
-
-    [Fact]
-    public void GetOrAdd_stores_the_ticket_under_its_event_once_per_key()
-    {
-        var key = Guid.NewGuid();
-        var ticket = Seats(RockFestId, 1)[0];
-
-        var created = _repository.GetOrAdd(key, ticket, out var wasCreated);
-        var retried = _repository.GetOrAdd(key, Seats(RockFestId, 1)[0], out var wasCreatedOnRetry);
-
-        Assert.True(wasCreated);
-        Assert.False(wasCreatedOnRetry);
-        Assert.Same(created, retried);
-        Assert.Same(ticket, Assert.Single(_repository.GetByEvent(RockFestId)));
-    }
-
-    [Fact]
-    public void Update_replaces_the_ticket_within_its_event()
-    {
-        var seat = Seats(RockFestId, 1)[0];
-        _repository.AddRange(RockFestId, [seat]);
-
-        var sold = new Ticket { Id = seat.Id, EventId = RockFestId, SeatNumber = seat.SeatNumber, Status = TicketStatus.Sold };
-        _repository.Update(sold);
-
-        Assert.Same(sold, _repository.GetById(RockFestId, seat.Id));
-        Assert.Single(_repository.GetByEvent(RockFestId));
-    }
-
-    [Fact]
-    public void Update_of_unknown_ticket_throws()
-    {
-        Assert.Throws<KeyNotFoundException>(() => _repository.Update(Seats(RockFestId, 1)[0]));
-    }
-
-    [Fact]
-    public void Remove_deletes_the_ticket_from_its_event()
-    {
-        var seats = Seats(RockFestId, 2);
-        _repository.AddRange(RockFestId, seats);
-
-        Assert.True(_repository.Remove(seats[0].Id));
-        Assert.False(_repository.Remove(seats[0].Id));
-
-        Assert.Null(_repository.GetById(seats[0].Id));
-        Assert.Same(seats[1], Assert.Single(_repository.GetByEvent(RockFestId)));
+        Assert.Empty(_repository.GetByEvent(RockFestId));
     }
 
     [Fact]
@@ -148,7 +99,6 @@ public class InMemoryTicketRepositoryTests
         Parallel.ForEach(eventIds, eventId => _repository.AddRange(eventId, Seats(eventId, 50)));
 
         Assert.All(eventIds, eventId => Assert.Equal(50, _repository.GetByEvent(eventId).Count));
-        Assert.Equal(1000, _repository.GetAll().Count);
     }
 
     [Fact]
