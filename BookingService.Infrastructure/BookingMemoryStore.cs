@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using BookingService.Domain;
+using BookingService.Domain.Tickets;
 
 namespace BookingService.Infrastructure;
 

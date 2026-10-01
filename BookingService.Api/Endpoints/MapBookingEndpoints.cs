@@ -1,7 +1,7 @@
-using BookingService.Api.Dtos;
-using BookingService.Application.Repositories;
-using BookingService.Application.Tickets;
-using BookingService.Domain;
+using BookingService.Api.Contracts;
+using BookingService.Application.Abstractions;
+using BookingService.Application.Tickets.Commands;
+using BookingService.Domain.Tickets;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookingService.Api.Endpoints;
@@ -48,7 +48,7 @@ public static class BookingEndpoints
             var ticket = ticketRepository.GetOrAdd(idempotencyKey, newTicket, out var wasCreated);
 
             // 4. Retornar DTO del ticket (SP-07)
-            var response = new TicketDto(
+            var response = new TicketResponse(
                 ticket.Id,
                 ticket.EventId,
                 ticket.FullName,
