@@ -12,6 +12,21 @@ public class InMemoryTicketRepository : ITicketRepository
     private readonly Dictionary<Guid, Guid> _ticketIdsByIdempotencyKey = new();
     private readonly Lock _lock = new();
 
+    public InMemoryTicketRepository(bool seedDefaultInventory = false)
+    {
+        if (seedDefaultInventory)
+        {
+            SeedDefaultInventory();
+        }
+    }
+
+    public void SeedDefaultInventory()
+    {
+        var defaultEvent = InMemoryEventCatalog.DefaultEvent;
+        var initialSeats = EventInventoryFactory.CreateInitialInventory(defaultEvent);
+        AddRange(defaultEvent.Id, initialSeats);
+    }
+
     public Ticket GetOrAdd(Guid idempotencyKey, Ticket ticket, out bool wasCreated)
     {
         lock (_lock)
