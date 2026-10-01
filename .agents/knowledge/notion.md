@@ -120,6 +120,16 @@
 | `VAL-03` | Unique Ticket Code Generator | Domain | **Listo** | `TicketCodeGenerator` ("TK-{GUID:N}") con tests de concurrencia masiva. |
 | `API-01` | `POST /events/{id}/tickets` | Api | **Listo / Integrado** | Endpoint mapeado en `BookingEndpoints.cs` con resolución por DI. |
 | `API-02` | Idempotency Handler | Api / Infra | **Listo / Integrado** | `X-Idempotency-Key` en endpoint, middleware HTTP 400 y cache en repo. |
+| `ALIGN-01` | Definición de Contrato de Evento (SP-03) | Cross-Cutting | **Listo** | Estructura compartida de Evento (`eventId`, `name`, `artist`, `venueName`, `date`, `totalSeats: 50`). |
+| `ALIGN-02` | Definición de Formato de Ticket y Asiento | Cross-Cutting | **Listo** | Representación de asiento (`seatNumber: "A-1".."A-50"` y status `Available`). |
+| `DOM-01` | Modelado de Estados de Ticket y Asiento | Domain | **Listo** | Enums `TicketStatus: Available, Sold`, propiedades en `Ticket`. |
+| `DOM-02` | Reglas de Transición y Validación de Venta | Domain | **PR / Review** | Método `Ticket.Purchase(...)` y `TicketAlreadySoldException`. |
+| `DOM-03` | Generación de Inventario Inicial por Evento | Domain | **Listo** | `EventInventoryFactory` generando los 50 asientos iniciales. |
+| `APP-03` | Precarga / Seeding de Eventos con Lote de Tickets | Infra / App | **Listo** | Precarga consistente en `InMemoryEventCatalog` e `InMemoryTicketRepository`. |
+| `FIX-01` | Fix Constructores DI en `InMemoryEventCatalog` | Infra / Api | **Listo** | Resolución unívoca de constructores DI y registro explícito en `Program.cs`. |
+| `APP-01` | Query: Listar Tickets Disponibles | Application | **En curso** | `GetAvailableTicketsQuery` y su handler filtrando por `Available`. |
+| `APP-02` | Query: Verificar Disponibilidad Puntual | Application | **Sin empezar** | `CheckTicketAvailabilityQuery` consultando disponibilidad por `ticketId`. |
+| `API-03` | Endpoint Verificar Asiento | Api | **Sin empezar** | `GET /events/{eventId}/tickets/{ticketId}/availability`. |
 
 ---
 
