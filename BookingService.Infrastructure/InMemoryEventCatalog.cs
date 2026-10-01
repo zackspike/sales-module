@@ -28,13 +28,6 @@ public class InMemoryEventCatalog : IEventCatalog
         _events.TryAdd(DefaultEvent.Id, DefaultEvent);
     }
 
-    public InMemoryEventCatalog(IEnumerable<Event> events)
-    {
-        foreach (var @event in events)
-        {
-            _events.TryAdd(@event.Id, @event);
-        }
-    }
 
     public bool Exists(Guid eventId) => _events.ContainsKey(eventId);
 
