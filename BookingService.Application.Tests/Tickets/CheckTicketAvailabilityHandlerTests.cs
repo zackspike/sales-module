@@ -29,7 +29,6 @@ public class CheckTicketAvailabilityHandlerTests
 
         Assert.NotNull(result);
         Assert.Equal(_availableSeat.Id, result.TicketId);
-        Assert.Equal(KnownEventId, result.EventId);
         Assert.Equal("A-1", result.SeatNumber);
         Assert.Equal("Available", result.Status);
     }
@@ -41,7 +40,6 @@ public class CheckTicketAvailabilityHandlerTests
 
         Assert.NotNull(result);
         Assert.Equal(_soldSeat.Id, result.TicketId);
-        Assert.Equal(KnownEventId, result.EventId);
         Assert.Equal("A-2", result.SeatNumber);
         Assert.Equal("Sold", result.Status);
     }

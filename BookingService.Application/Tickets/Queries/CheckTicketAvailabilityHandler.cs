@@ -20,7 +20,7 @@ public sealed class CheckTicketAvailabilityHandler
     /// <summary>
     /// Returns the availability information for the seat, or null if the event or ticket is not found.
     /// </summary>
-    public TicketAvailabilityDto? Handle(CheckTicketAvailabilityQuery query)
+    public SeatAvailabilityDto? Handle(CheckTicketAvailabilityQuery query)
     {
         if (!_eventCatalog.Exists(query.EventId))
         {
@@ -33,9 +33,8 @@ public sealed class CheckTicketAvailabilityHandler
             return null;
         }
 
-        return new TicketAvailabilityDto(
+        return new SeatAvailabilityDto(
             ticket.Id,
-            ticket.EventId,
             ticket.SeatNumber,
             ticket.Status.ToString());
     }
