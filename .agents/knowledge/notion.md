@@ -12,8 +12,9 @@
 ## 1. Project Overview & Scope (MVP-02)
 
 **Goal:** Event Search and Purchase (v1.0)
-* An unauthenticated fan searches for an event by name, views event details, and completes a ticket purchase.
-* **Out of scope:** Authentication/Login, real payment gateway, external third-party systems, seat selection, sections, and pricing calculations.
+* An unauthenticated fan searches for an event by name, views event details, picks an available seat, and completes the purchase of that seat.
+* **Out of scope:** Authentication/Login, real payment gateway, external third-party systems, sections, and pricing calculations.
+* **Seat choice:** The fan chooses the seat from the event's available seats; the backend never assigns one.
 
 ### Participating Services
 * **Error200 (Front):** Fan-facing UI (search input, event details, purchase form, ticket display).
@@ -99,7 +100,7 @@
 
 ### Requirement: Cross-Cutting — Global Exception Handling & Setup
 
-* **Middleware:** Centralized global exception handler in `BookingService.Api.Common.GlobalExceptionMiddleware`.
+* **Middleware:** Centralized global exception handler in `BookingService.Api.Middleware.GlobalExceptionMiddleware`.
 * **Standard Error Responses:** Clean, consistent JSON error payloads (`statusCode`, `message`, `details`, `traceId`, `timestampUtc`).
   * `BadHttpRequestException` -> `400 Bad Request`
   * `KeyNotFoundException` -> `404 Not Found`
