@@ -1,5 +1,7 @@
 using BookingService.Application.Abstractions;
 using BookingService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BookingService.Infrastructure;
@@ -7,12 +9,28 @@ namespace BookingService.Infrastructure;
 public static class DependencyInjection
 {
     /// <summary>
-    /// Registers the in-memory stores. They hold the application state, so they must be singletons.
+    /// Registers infrastructure services. If a PostgreSQL connection string ("DefaultConnection")
+    /// is configured, it registers EF Core with Postgres repositories. Otherwise, it falls back
+    /// to in-memory stores for isolated testing without a live database.
     /// </summary>
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration? configuration = null)
     {
-        services.AddSingleton<IEventCatalog, InMemoryEventCatalog>();
-        services.AddSingleton<ITicketRepository>(_ => new InMemoryTicketRepository(seedDefaultInventory: true));
+        var connectionString = configuration?.GetConnectionString("DefaultConnection");
+
+        if (!string.IsNullOrWhiteSpace(connectionString))
+        {
+            services.AddDbContext<BookingDbContext>(options =>
+                options.UseNpgsql(connectionString));
+
+            services.AddScoped<IEventCatalog, PostgresEventCatalog>();
+            services.AddScoped<ITicketRepository, PostgresTicketRepository>();
+        }
+        else
+        {
+            services.AddSingleton<IEventCatalog, InMemoryEventCatalog>();
+            services.AddSingleton<ITicketRepository>(_ => new InMemoryTicketRepository(seedDefaultInventory: true));
+        }
+
         return services;
     }
 }

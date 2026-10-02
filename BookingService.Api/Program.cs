@@ -3,6 +3,7 @@ using BookingService.Api.Endpoints;
 using BookingService.Api.Middleware;
 using BookingService.Application;
 using BookingService.Infrastructure;
+using BookingService.Infrastructure.Persistence;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,7 +45,7 @@ builder.Services.AddCors(options =>
 
 builder.Services
     .AddApplication()
-    .AddInfrastructure();
+    .AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
@@ -54,6 +55,13 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetService<BookingDbContext>();
+    if (dbContext is not null)
+    {
+        BookingDbSeeder.Seed(dbContext);
+    }
 }
 
 app.UseCors();
