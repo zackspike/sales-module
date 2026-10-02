@@ -1,43 +1,22 @@
 namespace BookingService.Domain;
 
 /// <summary>
-/// Domain factory that generates the initial seat/ticket inventory for an event (SP-03 / DOM-03).
+/// Domain factory that generates event seats for a given event based on the venue seats.
+/// EventId is a parameter obtained from the EventService, and VenueSeats are obtained from the VenueService.
+/// The factory creates a list of EventSeat entities that represent the available seats for the event, each associated with a specific venue seat.
 /// </summary>
 public static class EventInventoryFactory
 {
-    public static IReadOnlyList<Ticket> CreateInitialInventory(Event @event, string rowPrefix = "A")
+    public static List<EventSeat> GenerateEventSeats(Guid eventId, IEnumerable<VenueSeat> venueSeats)
     {
-        ArgumentNullException.ThrowIfNull(@event);
-        return CreateInitialInventory(@event.Id, @event.TotalSeats, rowPrefix);
-    }
+        var eventSeats = new List<EventSeat>();
 
-    public static IReadOnlyList<Ticket> CreateInitialInventory(Guid eventId, int totalSeats, string rowPrefix = "A")
-    {
-        if (eventId == Guid.Empty)
+        foreach (var venueSeat in venueSeats)
         {
-            throw new ArgumentException("EventId must not be empty.", nameof(eventId));
+            var eventSeat = EventSeat.CreateAvailable(eventId, venueSeat.Id);
+            eventSeats.Add(eventSeat);
         }
 
-        if (totalSeats <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(totalSeats), "Total seats must be greater than zero.");
-        }
-
-        var tickets = new List<Ticket>(totalSeats);
-        var now = DateTime.UtcNow;
-
-        for (var i = 1; i <= totalSeats; i++)
-        {
-            tickets.Add(new Ticket
-            {
-                Id = Guid.NewGuid(),
-                EventId = eventId,
-                SeatNumber = $"{rowPrefix}-{i}",
-                Status = TicketStatus.Available,
-                CreatedAtUtc = now
-            });
-        }
-
-        return tickets;
+        return eventSeats;
     }
 }

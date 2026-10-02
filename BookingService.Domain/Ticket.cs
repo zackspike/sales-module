@@ -1,34 +1,30 @@
-using BookingService.Domain.Exceptions;
-
 namespace BookingService.Domain;
 
+/// <summary>
+/// Represents a ticket for an event seat.
+/// This entity resembles a physical ticket that is issued to a customer when they purchase a seat for an event.
+/// This means that a ticket is associated with a specific event seat, and it contains information about the customer who purchased the ticket, as well as the time of purchase.
+/// </summary>
 public class Ticket
 {
     public Guid Id { get; private set; }
-    public Guid EventId { get; private set; }
-    public Guid SeatId { get; private set; } // The seat associated with this ticket
-    public string FullName { get; private set; } = string.Empty;
-    public string Email { get; private set; } = string.Empty;
-    public string TicketCode { get; private set; } = string.Empty;
-    public DateTime CreatedAtUtc { get; set; }
-    public DateTime? PurchasedAtUtc { get; set; }
+    public string TicketCode { get; private set; } = string.Empty; // A unique code that identifies the ticket. This code is generated when the ticket is generated.
+    public Guid EventSeatId { get; private set; } // The event seat associated with this ticket
+    public string HolderName { get; private set; } = string.Empty; // The full name of the person who holds the ticket. Not necessarily the same as the buyer of the ticket (if eventually it is possile to buy more than one ticket per order). This is the name that would be printed on the ticket.
+    public string HolderEmail { get; private set; } = string.Empty; // The email of the person who holds the ticket. Not necessarily the same as the buyer of the ticket (if eventually it is possile to buy more than one ticket per order). 
+    public DateTime SoldAtUtc { get; private set; }
 
-    /// <summary>
-    /// Sells this seat to the given customer (SP-05 / DOM-02). A seat can only be sold once.
-    /// </summary>
-    /// <exception cref="TicketAlreadySoldException">The seat is already sold.</exception>
-    public void Purchase(string fullName, string email, Guid idempotencyKey, DateTime purchasedAtUtc)
+    internal static Ticket Issue(Guid eventSeatId, string holderName, string holderEmail, DateTime soldAtUtc)
     {
-        if (Status == TicketStatus.Sold)
+        return new Ticket
         {
-            throw new TicketAlreadySoldException(Id);
-        }
-
-        FullName = fullName;
-        Email = email;
-        IdempotencyKey = idempotencyKey;
-        TicketCode = TicketCodeGenerator.Generate();
-        Status = TicketStatus.Sold;
-        PurchasedAtUtc = purchasedAtUtc;
+            Id = Guid.NewGuid(),
+            TicketCode = TicketCodeGenerator.GenerateTicketCode(),
+            EventSeatId = eventSeatId,
+            HolderName = holderName,
+            HolderEmail = holderEmail,
+            SoldAtUtc = soldAtUtc
+        };
     }
+
 }
