@@ -17,7 +17,7 @@ public static class TicketEndpoints
     {
         var tickets = app.MapGroup("/events/{eventId:guid}/tickets").WithTags("Tickets");
 
-        tickets.MapGet("/", GetAvailableTickets)
+        tickets.MapGet("/available", GetAvailableTickets)
             .Produces<IReadOnlyList<SeatAvailabilityDto>>()
             .Produces(StatusCodes.Status404NotFound);
 
