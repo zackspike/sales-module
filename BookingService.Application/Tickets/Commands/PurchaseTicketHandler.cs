@@ -44,9 +44,7 @@ public sealed class PurchaseTicketHandler
         var existingTicket = _tickets.GetByIdempotencyKey(command.IdempotencyKey);
         if (existingTicket is not null)
         {
-            return existingTicket.Id == command.TicketId && existingTicket.EventId == command.EventId
-                ? PurchaseTicketResult.Replayed(existingTicket)
-                : PurchaseTicketResult.Failed(PurchaseTicketStatus.IdempotencyKeyConflict);
+            return ReplayOrConflict(existingTicket, command);
         }
 
         // 2. Fetch Aggregate Root
@@ -65,7 +63,8 @@ public sealed class PurchaseTicketHandler
         }
         catch (TicketAlreadySoldException)
         {
-            return PurchaseTicketResult.Failed(PurchaseTicketStatus.AlreadySold);
+            // A concurrent request may have sold this seat after step 1, possibly with this same key.
+            return ResolveLostRace(command);
         }
 
         // 4. Persistence with Concurrency Conflict Handling
@@ -75,9 +74,32 @@ public sealed class PurchaseTicketHandler
         }
         catch (TicketAlreadySoldException)
         {
-            return PurchaseTicketResult.Failed(PurchaseTicketStatus.AlreadySold);
+            return ResolveLostRace(command);
+        }
+        catch (DuplicateIdempotencyKeyException)
+        {
+            return ResolveLostRace(command);
         }
 
         return PurchaseTicketResult.Purchased(ticket);
     }
+
+    /// <summary>
+    /// Resolves a purchase that lost a race against a concurrent request. The idempotency key is
+    /// looked up again: if the winner used it, this request is a replay (same seat) or a key conflict
+    /// (another seat); otherwise the seat was sold to someone else.
+    /// </summary>
+    private PurchaseTicketResult ResolveLostRace(PurchaseTicketCommand command)
+    {
+        var winner = _tickets.GetByIdempotencyKey(command.IdempotencyKey);
+
+        return winner is null
+            ? PurchaseTicketResult.Failed(PurchaseTicketStatus.AlreadySold)
+            : ReplayOrConflict(winner, command);
+    }
+
+    private static PurchaseTicketResult ReplayOrConflict(Ticket existingTicket, PurchaseTicketCommand command) =>
+        existingTicket.Id == command.TicketId && existingTicket.EventId == command.EventId
+            ? PurchaseTicketResult.Replayed(existingTicket)
+            : PurchaseTicketResult.Failed(PurchaseTicketStatus.IdempotencyKeyConflict);
 }

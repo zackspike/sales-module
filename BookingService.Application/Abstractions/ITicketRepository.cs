@@ -35,5 +35,6 @@ public interface ITicketRepository
     /// In persistent stores, enforces optimistic concurrency control.
     /// </summary>
     /// <exception cref="TicketAlreadySoldException">Thrown when an optimistic concurrency conflict occurs.</exception>
+    /// <exception cref="DuplicateIdempotencyKeyException">Thrown when the ticket's idempotency key is already used by another ticket.</exception>
     void Update(Ticket ticket);
 }
