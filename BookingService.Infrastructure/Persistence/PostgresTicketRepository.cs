@@ -1,11 +1,15 @@
 using BookingService.Application.Abstractions;
 using BookingService.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace BookingService.Infrastructure.Persistence;
 
 public class PostgresTicketRepository : ITicketRepository
 {
+    // Must match the index name declared in TicketConfiguration / migrations.
+    private const string IdempotencyKeyIndexName = "IX_tickets_IdempotencyKey";
+
     private readonly BookingDbContext _dbContext;
 
     public PostgresTicketRepository(BookingDbContext dbContext)
@@ -89,5 +93,16 @@ public class PostgresTicketRepository : ITicketRepository
         {
             throw new TicketAlreadySoldException(ticket.Id);
         }
+        catch (DbUpdateException ex) when (IsIdempotencyKeyViolation(ex))
+        {
+            throw new DuplicateIdempotencyKeyException(ticket.IdempotencyKey ?? Guid.Empty, ex);
+        }
     }
+
+    private static bool IsIdempotencyKeyViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: IdempotencyKeyIndexName
+        };
 }
