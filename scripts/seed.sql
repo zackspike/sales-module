@@ -8,10 +8,10 @@ SELECT
   '11111111-1111-1111-1111-111111111111',
   'A-' || i,
   'Available',
-  '',
-  '',
-  '',
-  '00000000-0000-0000-0000-000000000000',
+  NULL,
+  NULL,
+  NULL,
+  NULL,
   NOW() AT TIME ZONE 'UTC',
   NULL
 FROM generate_series(1, 50) AS i

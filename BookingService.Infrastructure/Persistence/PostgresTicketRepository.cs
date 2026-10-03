@@ -58,38 +58,36 @@ public class PostgresTicketRepository : ITicketRepository
     public Ticket? GetById(Guid eventId, Guid ticketId)
     {
         return _dbContext.Tickets
-            .AsNoTracking()
             .FirstOrDefault(t => t.EventId == eventId && t.Id == ticketId);
     }
 
-    public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase)
+    public Ticket? GetByIdempotencyKey(Guid idempotencyKey)
     {
-        using var transaction = _dbContext.Database.BeginTransaction();
-
-        if (idempotencyKey != Guid.Empty)
+        if (idempotencyKey == Guid.Empty)
         {
-            var existingTicket = _dbContext.Tickets
-                .FirstOrDefault(t => t.IdempotencyKey == idempotencyKey);
+            return null;
+        }
 
-            if (existingTicket is not null)
+        return _dbContext.Tickets
+            .AsNoTracking()
+            .FirstOrDefault(t => t.IdempotencyKey == idempotencyKey);
+    }
+
+    public void Update(Ticket ticket)
+    {
+        try
+        {
+            var entry = _dbContext.Entry(ticket);
+            if (entry.State == EntityState.Detached)
             {
-                return new TicketPurchaseOutcome(existingTicket, Replayed: true);
+                _dbContext.Tickets.Update(ticket);
             }
+
+            _dbContext.SaveChanges();
         }
-
-        var ticket = _dbContext.Tickets
-            .FirstOrDefault(t => t.EventId == eventId && t.Id == ticketId);
-
-        if (ticket is null)
+        catch (DbUpdateConcurrencyException)
         {
-            return new TicketPurchaseOutcome(null, Replayed: false);
+            throw new TicketAlreadySoldException(ticket.Id);
         }
-
-        purchase(ticket);
-
-        _dbContext.SaveChanges();
-        transaction.Commit();
-
-        return new TicketPurchaseOutcome(ticket, Replayed: false);
     }
 }

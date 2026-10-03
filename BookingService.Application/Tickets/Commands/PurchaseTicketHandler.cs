@@ -5,8 +5,7 @@ namespace BookingService.Application.Tickets.Commands;
 
 /// <summary>
 /// Buys a specific seat (SP-05 / SP-06 / APP-04): validates name, email and event (400/404),
-/// then sells the seat atomically and idempotently through <see cref="ITicketRepository.PurchaseOnce"/>.
-/// The "a seat is sold only once" rule lives in <see cref="Domain.Tickets.Ticket.Purchase"/>.
+/// orchestrates idempotency checks and executes the business invariant via <see cref="Domain.Tickets.Ticket.Purchase"/>.
 /// </summary>
 public sealed class PurchaseTicketHandler
 {
@@ -41,35 +40,44 @@ public sealed class PurchaseTicketHandler
             return PurchaseTicketResult.Failed(PurchaseTicketStatus.EventNotFound);
         }
 
+        // 1. Idempotency Check
+        var existingTicket = _tickets.GetByIdempotencyKey(command.IdempotencyKey);
+        if (existingTicket is not null)
+        {
+            return existingTicket.Id == command.TicketId && existingTicket.EventId == command.EventId
+                ? PurchaseTicketResult.Replayed(existingTicket)
+                : PurchaseTicketResult.Failed(PurchaseTicketStatus.IdempotencyKeyConflict);
+        }
+
+        // 2. Fetch Aggregate Root
+        var ticket = _tickets.GetById(command.EventId, command.TicketId);
+        if (ticket is null)
+        {
+            return PurchaseTicketResult.Failed(PurchaseTicketStatus.TicketNotFound);
+        }
+
+        // 3. Domain Logic Execution on Aggregate
         var fullName = command.FullName!.Trim();
         var email = command.Email!.Trim();
-
-        TicketPurchaseOutcome outcome;
         try
         {
-            outcome = _tickets.PurchaseOnce(
-                command.IdempotencyKey,
-                command.EventId,
-                command.TicketId,
-                ticket => ticket.Purchase(fullName, email, command.IdempotencyKey, DateTime.UtcNow));
+            ticket.Purchase(fullName, email, command.IdempotencyKey, DateTime.UtcNow);
         }
         catch (TicketAlreadySoldException)
         {
             return PurchaseTicketResult.Failed(PurchaseTicketStatus.AlreadySold);
         }
 
-        if (outcome.Ticket is null)
+        // 4. Persistence with Concurrency Conflict Handling
+        try
         {
-            return PurchaseTicketResult.Failed(PurchaseTicketStatus.TicketNotFound);
+            _tickets.Update(ticket);
+        }
+        catch (TicketAlreadySoldException)
+        {
+            return PurchaseTicketResult.Failed(PurchaseTicketStatus.AlreadySold);
         }
 
-        if (!outcome.Replayed)
-        {
-            return PurchaseTicketResult.Purchased(outcome.Ticket);
-        }
-
-        return outcome.Ticket.Id == command.TicketId && outcome.Ticket.EventId == command.EventId
-            ? PurchaseTicketResult.Replayed(outcome.Ticket)
-            : PurchaseTicketResult.Failed(PurchaseTicketStatus.IdempotencyKeyConflict);
+        return PurchaseTicketResult.Purchased(ticket);
     }
 }

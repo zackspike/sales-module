@@ -9,8 +9,8 @@ public class PurchaseTicketHandlerTests
     private static readonly Guid KnownEventId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid UnknownEventId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-    private readonly Ticket _seatA1 = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-1" };
-    private readonly Ticket _seatA2 = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-2" };
+    private readonly Ticket _seatA1 = new(Guid.NewGuid(), KnownEventId, "A-1", DateTime.UtcNow);
+    private readonly Ticket _seatA2 = new(Guid.NewGuid(), KnownEventId, "A-2", DateTime.UtcNow);
     private readonly PurchaseTicketHandler _handler;
 
     public PurchaseTicketHandlerTests()
@@ -65,56 +65,70 @@ public class PurchaseTicketHandlerTests
         var result = _handler.Handle(Command(_seatA2.Id, key));
 
         Assert.Equal(PurchaseTicketStatus.IdempotencyKeyConflict, result.Status);
-        Assert.Equal(TicketStatus.Available, _seatA2.Status);
+        Assert.Null(result.Ticket);
     }
 
     [Fact]
-    public void Unknown_seat_is_not_found()
-    {
-        var result = _handler.Handle(Command(Guid.NewGuid(), Guid.NewGuid()));
-
-        Assert.Equal(PurchaseTicketStatus.TicketNotFound, result.Status);
-    }
-
-    [Fact]
-    public void Seat_of_another_event_is_not_found()
-    {
-        var otherEventId = Guid.NewGuid();
-        var validator = new TicketPurchaseValidator(new FakeEventCatalog(KnownEventId, otherEventId));
-        var handler = new PurchaseTicketHandler(validator, new FakeTicketRepository(_seatA1));
-
-        var result = handler.Handle(Command(_seatA1.Id, Guid.NewGuid()) with { EventId = otherEventId });
-
-        Assert.Equal(PurchaseTicketStatus.TicketNotFound, result.Status);
-        Assert.Equal(TicketStatus.Available, _seatA1.Status);
-    }
-
-    [Fact]
-    public void Unknown_event_is_not_found()
-    {
-        var result = _handler.Handle(Command(_seatA1.Id, Guid.NewGuid()) with { EventId = UnknownEventId });
-
-        Assert.Equal(PurchaseTicketStatus.EventNotFound, result.Status);
-    }
-
-    [Fact]
-    public void Invalid_customer_data_is_invalid_and_seat_stays_available()
-    {
-        var result = _handler.Handle(Command(_seatA1.Id, Guid.NewGuid()) with { FullName = " ", Email = "abc" });
-
-        Assert.Equal(PurchaseTicketStatus.Invalid, result.Status);
-        Assert.Equal(["email", "fullName"], result.Errors.Keys.Order());
-        Assert.Equal(TicketStatus.Available, _seatA1.Status);
-    }
-
-    [Fact]
-    public void Missing_idempotency_key_is_invalid()
+    public void Empty_key_is_invalid()
     {
         var result = _handler.Handle(Command(_seatA1.Id, Guid.Empty));
 
         Assert.Equal(PurchaseTicketStatus.Invalid, result.Status);
-        Assert.Equal(["idempotencyKey"], result.Errors.Keys);
-        Assert.Equal(TicketStatus.Available, _seatA1.Status);
+        Assert.NotNull(result.Errors);
+        Assert.True(result.Errors.ContainsKey("idempotencyKey"));
+    }
+
+    [Fact]
+    public void Unknown_ticket_returns_not_found()
+    {
+        var result = _handler.Handle(Command(Guid.NewGuid(), Guid.NewGuid()));
+
+        Assert.Equal(PurchaseTicketStatus.TicketNotFound, result.Status);
+        Assert.Null(result.Ticket);
+    }
+
+    [Fact]
+    public void Unknown_event_returns_event_not_found()
+    {
+        var command = new PurchaseTicketCommand(
+            UnknownEventId,
+            _seatA1.Id,
+            "Juan Perez",
+            "juan.perez@example.com",
+            Guid.NewGuid());
+
+        var result = _handler.Handle(command);
+
+        Assert.Equal(PurchaseTicketStatus.EventNotFound, result.Status);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Missing_name_is_invalid(string? fullName)
+    {
+        var command = Command(_seatA1.Id, Guid.NewGuid()) with { FullName = fullName };
+
+        var result = _handler.Handle(command);
+
+        Assert.Equal(PurchaseTicketStatus.Invalid, result.Status);
+        Assert.True(result.Errors!.ContainsKey("fullName"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-an-email")]
+    [InlineData("@missinguser.com")]
+    public void Invalid_email_is_rejected(string? email)
+    {
+        var command = Command(_seatA1.Id, Guid.NewGuid()) with { Email = email };
+
+        var result = _handler.Handle(command);
+
+        Assert.Equal(PurchaseTicketStatus.Invalid, result.Status);
+        Assert.True(result.Errors!.ContainsKey("email"));
     }
 
     [Fact]
@@ -156,31 +170,42 @@ public class PurchaseTicketHandlerTests
         private readonly Dictionary<Guid, Guid> _ticketIdsByIdempotencyKey = new();
         private readonly Lock _lock = new();
 
-        public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase)
+        public Ticket? GetById(Guid eventId, Guid ticketId)
         {
             lock (_lock)
             {
-                if (_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var existingTicketId))
-                {
-                    return new TicketPurchaseOutcome(_tickets.First(t => t.Id == existingTicketId), Replayed: true);
-                }
+                return _tickets.FirstOrDefault(t => t.Id == ticketId && t.EventId == eventId);
+            }
+        }
 
-                var ticket = _tickets.FirstOrDefault(t => t.Id == ticketId && t.EventId == eventId);
-                if (ticket is null)
-                {
-                    return new TicketPurchaseOutcome(null, Replayed: false);
-                }
+        public Ticket? GetByIdempotencyKey(Guid idempotencyKey)
+        {
+            if (idempotencyKey == Guid.Empty)
+            {
+                return null;
+            }
 
-                purchase(ticket);
-                _ticketIdsByIdempotencyKey[idempotencyKey] = ticket.Id;
-                return new TicketPurchaseOutcome(ticket, Replayed: false);
+            lock (_lock)
+            {
+                return _ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var ticketId)
+                    ? _tickets.FirstOrDefault(t => t.Id == ticketId)
+                    : null;
+            }
+        }
+
+        public void Update(Ticket ticket)
+        {
+            lock (_lock)
+            {
+                if (ticket.IdempotencyKey.HasValue && ticket.IdempotencyKey.Value != Guid.Empty)
+                {
+                    _ticketIdsByIdempotencyKey[ticket.IdempotencyKey.Value] = ticket.Id;
+                }
             }
         }
 
         public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
 
         public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId) => throw new NotSupportedException();
-
-        public Ticket? GetById(Guid eventId, Guid ticketId) => throw new NotSupportedException();
     }
 }

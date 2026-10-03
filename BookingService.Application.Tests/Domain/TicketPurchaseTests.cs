@@ -4,19 +4,25 @@ namespace BookingService.Application.Tests.Domain;
 
 public class TicketPurchaseTests
 {
+    private static readonly Guid EventId = Guid.NewGuid();
+
     [Fact]
     public void New_ticket_is_available()
     {
-        var ticket = new Ticket { Id = Guid.NewGuid(), SeatNumber = "A-1" };
+        var ticket = new Ticket(Guid.NewGuid(), EventId, "A-1", DateTime.UtcNow);
 
         Assert.Equal(TicketStatus.Available, ticket.Status);
         Assert.Null(ticket.PurchasedAtUtc);
+        Assert.Null(ticket.FullName);
+        Assert.Null(ticket.Email);
+        Assert.Null(ticket.TicketCode);
+        Assert.Null(ticket.IdempotencyKey);
     }
 
     [Fact]
     public void Purchase_sells_the_seat_to_the_customer()
     {
-        var ticket = new Ticket { Id = Guid.NewGuid(), SeatNumber = "A-1" };
+        var ticket = new Ticket(Guid.NewGuid(), EventId, "A-1", DateTime.UtcNow);
         var key = Guid.NewGuid();
         var purchasedAt = new DateTime(2026, 9, 26, 18, 30, 0, DateTimeKind.Utc);
 
@@ -33,7 +39,7 @@ public class TicketPurchaseTests
     [Fact]
     public void Sold_ticket_cannot_be_purchased_again()
     {
-        var ticket = new Ticket { Id = Guid.NewGuid(), SeatNumber = "A-1" };
+        var ticket = new Ticket(Guid.NewGuid(), EventId, "A-1", DateTime.UtcNow);
         ticket.Purchase("Juan Perez", "juan.perez@example.com", Guid.NewGuid(), DateTime.UtcNow);
         var originalCode = ticket.TicketCode;
 

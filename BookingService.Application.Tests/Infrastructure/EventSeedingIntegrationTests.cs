@@ -38,9 +38,10 @@ public class EventSeedingIntegrationTests
             Assert.NotEqual(Guid.Empty, seat.Id);
             Assert.NotEqual(default, seat.CreatedAtUtc);
             Assert.Null(seat.PurchasedAtUtc);
-            Assert.Empty(seat.TicketCode);
-            Assert.Empty(seat.FullName);
-            Assert.Empty(seat.Email);
+            Assert.Null(seat.TicketCode);
+            Assert.Null(seat.FullName);
+            Assert.Null(seat.Email);
+            Assert.Null(seat.IdempotencyKey);
         }
     }
 }

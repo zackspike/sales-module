@@ -30,14 +30,7 @@ public static class EventInventoryFactory
 
         for (var i = 1; i <= totalSeats; i++)
         {
-            tickets.Add(new Ticket
-            {
-                Id = Guid.NewGuid(),
-                EventId = eventId,
-                SeatNumber = $"{rowPrefix}-{i}",
-                Status = TicketStatus.Available,
-                CreatedAtUtc = now
-            });
+            tickets.Add(new Ticket(Guid.NewGuid(), eventId, $"{rowPrefix}-{i}", now));
         }
 
         return tickets;

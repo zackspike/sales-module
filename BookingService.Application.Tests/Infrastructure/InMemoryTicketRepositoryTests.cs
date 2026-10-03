@@ -117,8 +117,24 @@ public class InMemoryTicketRepositoryTests
         Assert.Equal("A-50", seats.Last().SeatNumber);
     }
 
+    [Fact]
+    public void Update_persists_purchased_ticket_and_records_idempotency_key()
+    {
+        var seat = Seats(RockFestId, 1)[0];
+        _repository.AddRange(RockFestId, [seat]);
+
+        var key = Guid.NewGuid();
+        seat.Purchase("Jane Doe", "jane@example.com", key, DateTime.UtcNow);
+        _repository.Update(seat);
+
+        var foundByKey = _repository.GetByIdempotencyKey(key);
+        Assert.NotNull(foundByKey);
+        Assert.Same(seat, foundByKey);
+        Assert.Equal(TicketStatus.Sold, foundByKey.Status);
+    }
+
     private static Ticket[] Seats(Guid eventId, int count) =>
         Enumerable.Range(1, count)
-            .Select(number => new Ticket { Id = Guid.NewGuid(), EventId = eventId, SeatNumber = $"A-{number}" })
+            .Select(number => new Ticket(Guid.NewGuid(), eventId, $"A-{number}", DateTime.UtcNow))
             .ToArray();
 }

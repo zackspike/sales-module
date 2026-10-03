@@ -26,8 +26,8 @@ public sealed record TicketResponse(
         ticket.Id,
         ticket.EventId,
         ticket.SeatNumber,
-        ticket.FullName,
-        ticket.Email,
-        ticket.TicketCode,
+        ticket.FullName ?? string.Empty,
+        ticket.Email ?? string.Empty,
+        ticket.TicketCode ?? string.Empty,
         ticket.PurchasedAtUtc);
 }

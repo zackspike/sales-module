@@ -2,6 +2,9 @@ using BookingService.Domain.Tickets;
 
 namespace BookingService.Application.Abstractions;
 
+/// <summary>
+/// Repository interface defining persistence operations for the <see cref="Ticket"/> aggregate root.
+/// </summary>
 public interface ITicketRepository
 {
     /// <summary>
@@ -22,18 +25,15 @@ public interface ITicketRepository
     Ticket? GetById(Guid eventId, Guid ticketId);
 
     /// <summary>
-    /// Runs <paramref name="purchase"/> on seat <paramref name="ticketId"/> of event
-    /// <paramref name="eventId"/> at most once per <paramref name="idempotencyKey"/>.
-    /// The key lookup, the seat lookup, the purchase and the key registration happen
-    /// atomically, so two concurrent buyers can't both acquire the same seat.
-    /// If <paramref name="purchase"/> throws, the key is not registered and the exception propagates.
+    /// Finds a ticket previously purchased with <paramref name="idempotencyKey"/>, if any.
+    /// Used to safely detect and replay idempotent requests.
     /// </summary>
-    TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase);
-}
+    Ticket? GetByIdempotencyKey(Guid idempotencyKey);
 
-/// <summary>
-/// Result of <see cref="ITicketRepository.PurchaseOnce"/>. <see cref="Ticket"/> is null when the
-/// seat does not exist in the event. When the key was already used, <see cref="Replayed"/> is true
-/// and <see cref="Ticket"/> is the ticket bought with it (which may be a different seat).
-/// </summary>
-public sealed record TicketPurchaseOutcome(Ticket? Ticket, bool Replayed);
+    /// <summary>
+    /// Persists changes to the mutated <paramref name="ticket"/> aggregate root.
+    /// In persistent stores, enforces optimistic concurrency control.
+    /// </summary>
+    /// <exception cref="TicketAlreadySoldException">Thrown when an optimistic concurrency conflict occurs.</exception>
+    void Update(Ticket ticket);
+}

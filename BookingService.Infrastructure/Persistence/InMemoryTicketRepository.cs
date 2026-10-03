@@ -6,8 +6,6 @@ namespace BookingService.Infrastructure.Persistence;
 
 public class InMemoryTicketRepository : ITicketRepository
 {
-    // Tickets grouped by event (eventId -> ticketId -> ticket), plus a ticketId -> eventId index
-    // so lookups by ticket id alone stay O(1).
     private readonly Dictionary<Guid, Dictionary<Guid, Ticket>> _ticketsByEvent = new();
     private readonly Dictionary<Guid, Guid> _eventIdsByTicketId = new();
     private readonly Dictionary<Guid, Guid> _ticketIdsByIdempotencyKey = new();
@@ -34,8 +32,6 @@ public class InMemoryTicketRepository : ITicketRepository
 
         lock (_lock)
         {
-            // Validate the whole batch before storing anything, so a bad ticket leaves the
-            // event inventory untouched.
             var batchIds = new HashSet<Guid>();
             foreach (var ticket in batch)
             {
@@ -80,33 +76,38 @@ public class InMemoryTicketRepository : ITicketRepository
         }
     }
 
-    public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase)
+    public Ticket? GetByIdempotencyKey(Guid idempotencyKey)
     {
+        if (idempotencyKey == Guid.Empty)
+        {
+            return null;
+        }
+
         lock (_lock)
         {
-            // The key check, the availability check done by `purchase` and the key registration
-            // share one critical section: of two concurrent buyers of the same seat only one can
-            // see it available, and a retried request can't buy a second seat.
-            if (_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var existingTicketId))
-            {
-                return new TicketPurchaseOutcome(FindById(existingTicketId)!, Replayed: true);
-            }
-
-            var ticket = _ticketsByEvent.TryGetValue(eventId, out var eventTickets)
-                ? eventTickets.GetValueOrDefault(ticketId)
+            return _ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var ticketId)
+                ? FindById(ticketId)
                 : null;
-            if (ticket is null)
-            {
-                return new TicketPurchaseOutcome(null, Replayed: false);
-            }
-
-            purchase(ticket);
-            _ticketIdsByIdempotencyKey[idempotencyKey] = ticket.Id;
-            return new TicketPurchaseOutcome(ticket, Replayed: false);
         }
     }
 
-    // The helpers below assume the caller holds _lock.
+    public void Update(Ticket ticket)
+    {
+        lock (_lock)
+        {
+            if (!_eventIdsByTicketId.ContainsKey(ticket.Id))
+            {
+                throw new KeyNotFoundException($"Ticket with id '{ticket.Id}' was not found.");
+            }
+
+            Store(ticket);
+
+            if (ticket.IdempotencyKey.HasValue && ticket.IdempotencyKey.Value != Guid.Empty)
+            {
+                _ticketIdsByIdempotencyKey[ticket.IdempotencyKey.Value] = ticket.Id;
+            }
+        }
+    }
 
     private Ticket? FindById(Guid id)
     {

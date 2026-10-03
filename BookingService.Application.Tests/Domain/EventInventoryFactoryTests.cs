@@ -19,7 +19,7 @@ public class EventInventoryFactoryTests
             Assert.Equal(TicketStatus.Available, t.Status);
             Assert.NotEqual(Guid.Empty, t.Id);
             Assert.Null(t.PurchasedAtUtc);
-            Assert.Empty(t.TicketCode);
+            Assert.Null(t.TicketCode);
         });
     }
 

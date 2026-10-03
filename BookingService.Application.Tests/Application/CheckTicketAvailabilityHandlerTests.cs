@@ -9,13 +9,15 @@ public class CheckTicketAvailabilityHandlerTests
     private static readonly Guid KnownEventId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid UnknownEventId = Guid.Parse("99999999-9999-9999-9999-999999999999");
 
-    private readonly Ticket _availableSeat = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-1", Status = TicketStatus.Available };
-    private readonly Ticket _soldSeat = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-2", Status = TicketStatus.Sold };
+    private readonly Ticket _availableSeat = new(Guid.NewGuid(), KnownEventId, "A-1", DateTime.UtcNow);
+    private readonly Ticket _soldSeat = new(Guid.NewGuid(), KnownEventId, "A-2", DateTime.UtcNow);
 
     private readonly CheckTicketAvailabilityHandler _handler;
 
     public CheckTicketAvailabilityHandlerTests()
     {
+        _soldSeat.Purchase("Jane Doe", "jane@example.com", Guid.NewGuid(), DateTime.UtcNow);
+
         var catalog = new FakeEventCatalog(KnownEventId);
         var repo = new FakeTicketRepository(_availableSeat, _soldSeat);
         _handler = new CheckTicketAvailabilityHandler(repo, catalog);
@@ -73,6 +75,7 @@ public class CheckTicketAvailabilityHandlerTests
             _tickets.FirstOrDefault(t => t.EventId == eventId && t.Id == ticketId);
         public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
         public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId) => throw new NotSupportedException();
-        public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase) => throw new NotSupportedException();
+        public Ticket? GetByIdempotencyKey(Guid idempotencyKey) => throw new NotSupportedException();
+        public void Update(Ticket ticket) => throw new NotSupportedException();
     }
 }

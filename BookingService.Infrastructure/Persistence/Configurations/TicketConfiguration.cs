@@ -39,8 +39,7 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(t => t.TicketCode)
             .HasMaxLength(100);
 
-        builder.Property(t => t.IdempotencyKey)
-            .IsRequired();
+        builder.Property(t => t.IdempotencyKey);
 
         builder.Property(t => t.CreatedAtUtc)
             .IsRequired();
@@ -50,6 +49,13 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(t => new { t.EventId, t.SeatNumber })
             .IsUnique();
 
-        builder.HasIndex(t => t.IdempotencyKey);
+        // Unique filtered index: ensures no idempotency key is duplicated once claimed,
+        // while allowing multiple NULLs for unsold seats.
+        builder.HasIndex(t => t.IdempotencyKey)
+            .IsUnique()
+            .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+
+        // Optimistic concurrency control mapped to PostgreSQL xmin system column
+        builder.Property<uint>("Version").IsRowVersion();
     }
 }
