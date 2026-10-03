@@ -61,6 +61,17 @@ public partial class EncapsulateTicketAndAddConcurrency : Migration
             nullable: false,
             defaultValue: 0u);
 
+        // Legacy rows stored sentinel values for unsold seats. Convert them to NULL before
+        // creating the filtered unique index; otherwise every Guid.Empty key collides (23505).
+        migrationBuilder.Sql(
+            "UPDATE tickets SET \"IdempotencyKey\" = NULL WHERE \"IdempotencyKey\" = '00000000-0000-0000-0000-000000000000';");
+        migrationBuilder.Sql(
+            "UPDATE tickets SET \"FullName\" = NULL WHERE \"FullName\" = '';");
+        migrationBuilder.Sql(
+            "UPDATE tickets SET \"Email\" = NULL WHERE \"Email\" = '';");
+        migrationBuilder.Sql(
+            "UPDATE tickets SET \"TicketCode\" = NULL WHERE \"TicketCode\" = '';");
+
         migrationBuilder.CreateIndex(
             name: "IX_tickets_IdempotencyKey",
             table: "tickets",
