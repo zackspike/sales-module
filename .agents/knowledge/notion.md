@@ -12,8 +12,9 @@
 ## 1. Project Overview & Scope (MVP-02)
 
 **Goal:** Event Search and Purchase (v1.0)
-* An unauthenticated fan searches for an event by name, views event details, and completes a ticket purchase.
-* **Out of scope:** Authentication/Login, real payment gateway, external third-party systems, seat selection, sections, and pricing calculations.
+* An unauthenticated fan searches for an event by name, views event details, picks an available seat, and completes the purchase of that seat.
+* **Out of scope:** Authentication/Login, real payment gateway, external third-party systems, sections, and pricing calculations.
+* **Seat choice:** The fan chooses the seat from the event's available seats; the backend never assigns one.
 
 ### Participating Services
 * **Error200 (Front):** Fan-facing UI (search input, event details, purchase form, ticket display).
@@ -44,9 +45,9 @@
 
 ### Requirement: SP-05 — Ticket Purchase Endpoint
 
-* **Endpoint:** `POST /events/{eventId:guid}/tickets`
+* **Endpoint:** `POST /events/{eventId:guid}/tickets/{ticketId:guid}/purchase` (buys one seat of the event)
 * **Authentication:** None (public endpoint).
-* **Route Parameter:** `eventId` (GUID identifier of the target event).
+* **Route Parameters:** `eventId` (target event), `ticketId` (seat from `GET /events/{eventId}/tickets`).
 * **Request Payload (JSON):**
   ```json
   {
@@ -56,19 +57,22 @@
   ```
 * **Validations & Error Responses:**
   * **400 Bad Request:** If `fullName` or `email` is missing, empty, or if `email` is not a valid email format (RFC 5321). The response body returns an `errors` dictionary indicating failing field(s).
-  * **404 Not Found:** If `eventId` does not match any known event in `IEventCatalog`.
+  * **400 Bad Request:** If the `X-Idempotency-Key` header is missing.
+  * **404 Not Found:** If `eventId` does not match any known event in `IEventCatalog`, or `ticketId` is not a seat of that event.
+  * **409 Conflict:** If the seat is already sold, or the idempotency key was already used for a different seat.
 * **Success Response (201 Created on new issuance, or 200 OK on idempotent replay):**
   ```json
   {
     "ticketId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "ticketCode": "TK-4f32a76fbf424b9195980da672807f87",
     "eventId": "11111111-1111-1111-1111-111111111111",
+    "seatNumber": "A-1",
     "fullName": "Jane Doe",
     "email": "jane.doe@example.com",
     "createdAt": "2026-09-20T18:00:00Z"
   }
   ```
-  *(Note: Field `createdAt` is explicitly serialized as camelCase via `[property: JsonPropertyName("createdAt")]` in `TicketDto`)*.
+  *(Note: Field `createdAt` is explicitly serialized as camelCase via `[property: JsonPropertyName("createdAt")]` in `TicketResponse` and holds the purchase time)*.
 
 ---
 
@@ -78,7 +82,7 @@
 * **Format:** Must be a valid `GUID` (e.g., UUIDv4).
   * If the header is provided but is not a valid GUID format, ASP.NET Core raises `BadHttpRequestException`, intercepted by `GlobalExceptionMiddleware` to return **400 Bad Request**.
 * **Behavior:**
-  * Exactly one ticket is created per unique idempotency key.
+  * Exactly one seat is purchased per unique idempotency key.
   * Replaying a request with an already-processed key returns the previously issued ticket (**200 OK**) without creating a second ticket.
   * Atomically enforced in `InMemoryTicketRepository` under synchronized `Lock`.
 
@@ -96,7 +100,7 @@
 
 ### Requirement: Cross-Cutting — Global Exception Handling & Setup
 
-* **Middleware:** Centralized global exception handler in `BookingService.Api.Common.GlobalExceptionMiddleware`.
+* **Middleware:** Centralized global exception handler in `BookingService.Api.Middleware.GlobalExceptionMiddleware`.
 * **Standard Error Responses:** Clean, consistent JSON error payloads (`statusCode`, `message`, `details`, `traceId`, `timestampUtc`).
   * `BadHttpRequestException` -> `400 Bad Request`
   * `KeyNotFoundException` -> `404 Not Found`
@@ -115,10 +119,10 @@
 | `SETUP-BS-T3` | Global Exception Middleware | Api | **Listo** | Centralized error handling retornando JSON y mapeo de HTTP 400. |
 | `MOCK-01` | Entity Modeling | Domain | **Listo** | Modelos de dominio `Ticket.cs` y `Event.cs`. |
 | `MOCK-02` | `InMemoryBookingStore` | Infrastructure | **Listo** | `InMemoryTicketRepository` thread-safe e `InMemoryEventCatalog` con eventos precargados. |
-| `VAL-01` | Request & Response DTOs | Application / Api | **Listo** | `PurchaseTicketCommand` y `TicketDto` con serialización `"createdAt"`. |
+| `VAL-01` | Request & Response DTOs | Application / Api | **Listo** | `PurchaseTicketCommand`, `PurchaseTicketRequest` y `TicketResponse` con serialización `"createdAt"`. |
 | `VAL-02` | Purchase Validations | Application | **Listo** | `TicketPurchaseValidator` con suite xUnit (400 required/email, 404 event). |
 | `VAL-03` | Unique Ticket Code Generator | Domain | **Listo** | `TicketCodeGenerator` ("TK-{GUID:N}") con tests de concurrencia masiva. |
-| `API-01` | `POST /events/{id}/tickets` | Api | **Listo / Integrado** | Endpoint mapeado en `BookingEndpoints.cs` con resolución por DI. |
+| `API-01` | `POST /events/{eventId}/tickets/{ticketId}/purchase` | Api | **Listo / Integrado** | Endpoint en `Endpoints/TicketEndpoints.cs` delegando a `PurchaseTicketHandler`. |
 | `API-02` | Idempotency Handler | Api / Infra | **Listo / Integrado** | `X-Idempotency-Key` en endpoint, middleware HTTP 400 y cache en repo. |
 | `ALIGN-01` | Definición de Contrato de Evento (SP-03) | Cross-Cutting | **Listo** | Estructura compartida de Evento (`eventId`, `name`, `artist`, `venueName`, `date`, `totalSeats: 50`). |
 | `ALIGN-02` | Definición de Formato de Ticket y Asiento | Cross-Cutting | **Listo** | Representación de asiento (`seatNumber: "A-1".."A-50"` y status `Available`). |
@@ -127,9 +131,9 @@
 | `DOM-03` | Generación de Inventario Inicial por Evento | Domain | **Listo** | `EventInventoryFactory` generando los 50 asientos iniciales. |
 | `APP-03` | Precarga / Seeding de Eventos con Lote de Tickets | Infra / App | **Listo** | Precarga consistente en `InMemoryEventCatalog` e `InMemoryTicketRepository`. |
 | `FIX-01` | Fix Constructores DI en `InMemoryEventCatalog` | Infra / Api | **Listo** | Resolución unívoca de constructores DI y registro explícito en `Program.cs`. |
-| `APP-01` | Query: Listar Tickets Disponibles | Application | **En curso** | `GetAvailableTicketsQuery` y su handler filtrando por `Available`. |
-| `APP-02` | Query: Verificar Disponibilidad Puntual | Application | **Sin empezar** | `CheckTicketAvailabilityQuery` consultando disponibilidad por `ticketId`. |
-| `API-03` | Endpoint Verificar Asiento | Api | **Sin empezar** | `GET /events/{eventId}/tickets/{ticketId}/availability`. |
+| `APP-01` | Query: Listar Tickets Disponibles | Application | **Listo** | `GetAvailableTicketsQuery` y su handler filtrando por `Available`. |
+| `APP-02` | Query: Verificar Disponibilidad Puntual | Application | **Listo** | `CheckTicketAvailabilityQuery` consultando disponibilidad por `ticketId`. |
+| `API-03` | Endpoint Verificar Asiento | Api | **Listo** | `GET /events/{eventId}/tickets/{ticketId}/availability`. |
 
 ---
 

@@ -1,4 +1,4 @@
-using BookingService.Application.Repositories;
+using BookingService.Application.Abstractions;
 using BookingService.Application.Tickets.Dtos;
 
 namespace BookingService.Application.Tickets.Queries;
