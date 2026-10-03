@@ -6,6 +6,10 @@ on:
   push:
     branches: [main, dev]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: "Code Quality & Linting"
@@ -29,20 +33,10 @@ jobs:
         run: dotnet format --verify-no-changes
 
   test:
-    name: "Tests"
+    name: "Build, Contract & Tests"
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: bookingservice_db
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
 
     steps:
       - name: "checkout code"
@@ -58,20 +52,18 @@ jobs:
           dotnet restore
           dotnet tool restore
 
-      - name: "apply database migrations and seed data"
+      - name: "build solution"
+        run: dotnet build --no-restore
+
+      - name: "verify openapi contract drift"
         run: |
-          if command -v pg_isready >/dev/null 2>&1 && pg_isready -h postgres -p 5432 >/dev/null 2>&1; then
-            DB_HOST="postgres"
-          else
-            DB_HOST="localhost"
-          fi
-          export ConnectionStrings__DefaultConnection="Host=${DB_HOST};Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
-          dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api
-          if command -v psql >/dev/null 2>&1; then
-            PGPASSWORD=postgres psql -h "${DB_HOST}" -U postgres -d bookingservice_db -f scripts/seed.sql || true
-          elif command -v docker >/dev/null 2>&1; then
-            docker exec $(docker ps -q -f ancestor=postgres:17-alpine | head -n 1) psql -U postgres -d bookingservice_db -f scripts/seed.sql || true
-          fi
+          dotnet swagger tofile --output openapi.json BookingService.Api/bin/Debug/net10.0/BookingService.Api.dll v1
+          git diff --exit-code -- openapi.json
+
+      - name: "verify migrations script generation"
+        run: |
+          dotnet ef migrations script --idempotent --output migrations.sql --project BookingService.Infrastructure --startup-project BookingService.Api
+          rm migrations.sql
 
       - name: "run tests"
         run: dotnet test --no-restore --verbosity normal
