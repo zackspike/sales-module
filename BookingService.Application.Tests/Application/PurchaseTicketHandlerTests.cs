@@ -154,8 +154,70 @@ public class PurchaseTicketHandlerTests
         Assert.Equal(9, results.Count(r => r.Status == PurchaseTicketStatus.AlreadySold));
     }
 
+    [Fact]
+    public void Concurrent_retry_with_same_key_is_replayed_when_update_conflicts()
+    {
+        var key = Guid.NewGuid();
+        var winner = SoldCopyOf(_seatA1, key);
+        var handler = HandlerWith(new RacingTicketRepository(_seatA1, winner, new TicketAlreadySoldException(_seatA1.Id)));
+
+        var result = handler.Handle(Command(_seatA1.Id, key));
+
+        Assert.Equal(PurchaseTicketStatus.Replayed, result.Status);
+        Assert.Same(winner, result.Ticket);
+    }
+
+    [Fact]
+    public void Concurrent_purchase_with_another_key_is_already_sold_when_update_conflicts()
+    {
+        var winner = SoldCopyOf(_seatA1, Guid.NewGuid());
+        var handler = HandlerWith(new RacingTicketRepository(_seatA1, winner, new TicketAlreadySoldException(_seatA1.Id)));
+
+        var result = handler.Handle(Command(_seatA1.Id, Guid.NewGuid()));
+
+        Assert.Equal(PurchaseTicketStatus.AlreadySold, result.Status);
+        Assert.Null(result.Ticket);
+    }
+
+    [Fact]
+    public void Concurrent_reuse_of_key_for_another_seat_is_a_conflict_when_update_hits_unique_key()
+    {
+        var key = Guid.NewGuid();
+        var winner = SoldCopyOf(_seatA1, key);
+        var handler = HandlerWith(new RacingTicketRepository(_seatA2, winner, new DuplicateIdempotencyKeyException(key)));
+
+        var result = handler.Handle(Command(_seatA2.Id, key));
+
+        Assert.Equal(PurchaseTicketStatus.IdempotencyKeyConflict, result.Status);
+        Assert.Null(result.Ticket);
+    }
+
+    [Fact]
+    public void Seat_sold_with_same_key_after_idempotency_check_is_replayed()
+    {
+        var key = Guid.NewGuid();
+        var winner = SoldCopyOf(_seatA1, key);
+        // The loaded aggregate is already sold: the concurrent request committed between steps 1 and 2.
+        var handler = HandlerWith(new RacingTicketRepository(winner, winner, new InvalidOperationException("Update must not be called.")));
+
+        var result = handler.Handle(Command(_seatA1.Id, key));
+
+        Assert.Equal(PurchaseTicketStatus.Replayed, result.Status);
+        Assert.Same(winner, result.Ticket);
+    }
+
     private static PurchaseTicketCommand Command(Guid ticketId, Guid idempotencyKey) =>
         new(KnownEventId, ticketId, "Juan Perez", "juan.perez@example.com", idempotencyKey);
+
+    private static PurchaseTicketHandler HandlerWith(ITicketRepository tickets) =>
+        new(new TicketPurchaseValidator(new FakeEventCatalog(KnownEventId)), tickets);
+
+    private static Ticket SoldCopyOf(Ticket seat, Guid idempotencyKey)
+    {
+        var copy = new Ticket(seat.Id, seat.EventId, seat.SeatNumber, seat.CreatedAtUtc);
+        copy.Purchase("Ana Lopez", "ana.lopez@example.com", idempotencyKey, DateTime.UtcNow);
+        return copy;
+    }
 
     private sealed class FakeEventCatalog(params Guid[] knownEvents) : IEventCatalog
     {
@@ -203,6 +265,28 @@ public class PurchaseTicketHandlerTests
                 }
             }
         }
+
+        public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
+
+        public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Simulates a request that loses a race: the handler's first idempotency lookup sees nothing,
+    /// but every later lookup sees <c>winner</c>, committed meanwhile by a concurrent request.
+    /// <see cref="Update"/> fails with the conflict the real repository would raise.
+    /// </summary>
+    private sealed class RacingTicketRepository(Ticket loaded, Ticket winner, Exception updateConflict) : ITicketRepository
+    {
+        private int _idempotencyLookups;
+
+        public Ticket? GetById(Guid eventId, Guid ticketId) =>
+            loaded.EventId == eventId && loaded.Id == ticketId ? loaded : null;
+
+        public Ticket? GetByIdempotencyKey(Guid idempotencyKey) =>
+            ++_idempotencyLookups > 1 && winner.IdempotencyKey == idempotencyKey ? winner : null;
+
+        public void Update(Ticket ticket) => throw updateConflict;
 
         public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
 
