@@ -26,17 +26,20 @@
 
 * **Framework:** .NET 10 / C# Minimal APIs.
 * **Architecture:** Domain-Driven Design (DDD) & Clean Architecture:
-  * `BookingService.Domain`: Core entities (`Ticket`, `Event`), code generator (`TicketCodeGenerator`), domain rules.
-  * `BookingService.Application`: Use cases, commands (`PurchaseTicketCommand`), DTOs, validations (`TicketPurchaseValidator`), abstractions (`ITicketRepository`, `IEventCatalog`).
-  * `BookingService.Infrastructure`: In-memory storage implementations (`InMemoryTicketRepository`, `InMemoryEventCatalog`).
+  * `BookingService.Domain`: Core entities (`Event`, `Zone`, `Seat`, `User`, `Ticket`), code generator (`TicketCodeGenerator`), domain rules.
+  * `BookingService.Application`: Use cases, commands (`PurchaseTicketCommand`), DTOs, validations (`TicketPurchaseValidator`), abstractions (`IEventRepository`, `ITicketRepository`, `IUserRepository`, `IUnitOfWork`).
+  * `BookingService.Infrastructure`: PostgreSQL persistence with EF Core (`BookingDbContext`, `EventRepository`, `TicketRepository`, `UserRepository`, `UnitOfWork`).
   * `BookingService.Api`: Minimal API endpoints, middleware (`GlobalExceptionMiddleware`), dependency injection composition (`Program.cs`).
-* **Data Strategy:** **In-Memory Concurrent Collections (No Database)**:
-  * Thread-safe memory storage for tickets (`InMemoryTicketRepository` with concurrency `Lock`).
-  * Thread-safe mock event catalog (`InMemoryEventCatalog`) seeded with known test event ID: `11111111-1111-1111-1111-111111111111`.
+* **Data Strategy:** **PostgreSQL (docker compose) accessed through the Repository pattern**:
+  * Schema in `database/init/001_create_booking_schema.sql` (`events`, `event_zones`, `zone_seats`, `users`, `tickets`), mapped by EF Core without migrations.
+  * Seed in `database/init/002_seed_default_event.sql`: test event ID `11111111-1111-1111-1111-111111111111` with 50 seats `A-1`..`A-50`.
+  * ACID purchases: `IUnitOfWork` transaction (READ COMMITTED) + `SELECT ... FOR UPDATE` on the ticket row + unique constraints (seat, ticket code, idempotency key, user email).
 * **Documentation & Testing:**
   * Minimal APIs with OpenAPI / Swagger UI support (`/swagger`).
   * Integration testing via `.http` file (`BookingService.Api.http`).
   * Unit and concurrency testing with xUnit (`BookingService.Application.Tests`).
+  * PostgreSQL integration and HTTP tests with Testcontainers (`BookingService.Infrastructure.Tests`).
+  * PostgreSQL integration and HTTP tests with Testcontainers (`BookingService.Infrastructure.Tests`).
 
 ---
 
@@ -44,9 +47,9 @@
 
 ### Requirement: SP-05 — Ticket Purchase Endpoint
 
-* **Endpoint:** `POST /events/{eventId:guid}/tickets`
+* **Endpoint:** `POST /events/{eventId:guid}/tickets/{ticketId:guid}/purchase` (seat purchase; seats listed by `GET /events/{eventId}/tickets/available`)
 * **Authentication:** None (public endpoint).
-* **Route Parameter:** `eventId` (GUID identifier of the target event).
+* **Route Parameters:** `eventId` (GUID of the target event) and `ticketId` (GUID of the seat ticket; 404 if it does not belong to the event).
 * **Request Payload (JSON):**
   ```json
   {
@@ -56,13 +59,15 @@
   ```
 * **Validations & Error Responses:**
   * **400 Bad Request:** If `fullName` or `email` is missing, empty, or if `email` is not a valid email format (RFC 5321). The response body returns an `errors` dictionary indicating failing field(s).
-  * **404 Not Found:** If `eventId` does not match any known event in `IEventCatalog`.
+  * **404 Not Found:** If `eventId` does not match any event stored in the database (`IEventRepository`).
+  * **409 Conflict:** If the seat is already sold, or the idempotency key was already used for a different seat.
 * **Success Response (201 Created on new issuance, or 200 OK on idempotent replay):**
   ```json
   {
     "ticketId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "ticketCode": "TK-4f32a76fbf424b9195980da672807f87",
     "eventId": "11111111-1111-1111-1111-111111111111",
+    "seatNumber": "A-1",
     "fullName": "Jane Doe",
     "email": "jane.doe@example.com",
     "createdAt": "2026-09-20T18:00:00Z"
@@ -80,7 +85,7 @@
 * **Behavior:**
   * Exactly one ticket is created per unique idempotency key.
   * Replaying a request with an already-processed key returns the previously issued ticket (**200 OK**) without creating a second ticket.
-  * Atomically enforced in `InMemoryTicketRepository` under synchronized `Lock`.
+  * Atomically enforced in the purchase transaction (`PurchaseTicketHandler` + `IUnitOfWork`) and by the unique constraint on `tickets.purchase_idempotency_key`.
 
 ---
 

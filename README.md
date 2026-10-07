@@ -7,6 +7,7 @@ Backend service responsible for ticket purchasing, idempotency handling, and uni
 
 ## Requirements
 * [.NET 8.0+ SDK](https://dotnet.microsoft.com/download) (Compatible with .NET 8, 9 and 10)
+* [Docker](https://www.docker.com/) with Docker Compose (PostgreSQL database and integration tests)
 
 ---
 
@@ -20,8 +21,12 @@ booking-service/
 ├── .githooks/                     # Git hooks enforcing Conventional Commits (commit-msg)
 ├── BookingService.Api/            # Minimal APIs, endpoints, middleware, HTTP models
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
-├── BookingService.Domain/         # Core business entities (Ticket, Event), value objects, domain rules
-├── BookingService.Infrastructure/ # In-memory store implementation (ConcurrentDictionary), persistence
+├── BookingService.Domain/         # Core business entities (Event, Zone, Seat, User, Ticket), domain rules
+├── BookingService.Infrastructure/ # PostgreSQL persistence (EF Core DbContext, repositories, unit of work)
+├── BookingService.Application.Tests/    # Unit tests (domain, validators, handlers with fakes)
+├── BookingService.Infrastructure.Tests/ # Integration tests against PostgreSQL (Testcontainers) and the HTTP API
+├── database/init/                 # SQL schema and seed scripts (source of truth of the database structure)
+├── docker-compose.yml             # Local PostgreSQL database
 ├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
 ├── .agents/                       # Agent workflows, specifications (Notion), and MCP integrations
 ├── AGENTS.md                      # Global architecture rules & agent workflow protocol
@@ -37,22 +42,39 @@ booking-service/
    git config core.hooksPath .githooks
    ```
 
-2. **Restore dependencies and build:**
+2. **Start the PostgreSQL database:**
+   ```bash
+   docker compose up -d
+   ```
+   * Listens on `localhost:5434` (override with `BOOKING_DB_PORT`); credentials default to the development values in `docker-compose.yml` and can be overridden with `BOOKING_DB_NAME`, `BOOKING_DB_USER` and `BOOKING_DB_PASSWORD`.
+   * On the first start it runs `database/init/001_create_booking_schema.sql` (tables `events`, `event_zones`, `zone_seats`, `users`, `tickets`) and `002_seed_default_event.sql` (event `11111111-1111-1111-1111-111111111111` with 50 seats `A-1`..`A-50`).
+   * To recreate the database from the scripts: `docker compose down -v && docker compose up -d`.
+   * The API reads the connection string `ConnectionStrings:BookingDatabase` (set in `appsettings.Development.json`; use the `ConnectionStrings__BookingDatabase` environment variable elsewhere).
+
+3. **Restore dependencies and build:**
    ```bash
    dotnet build
    ```
 
-3. **Run the API:**
+4. **Run the API:**
    ```bash
    dotnet run --project BookingService.Api
    ```
 
-3. **Explore the API:**
+5. **Explore the API:**
    * Swagger UI will be available at: `http://localhost:<port>/swagger` (in Development mode).
    * Health check endpoint: `GET /health` (returns `{ "status": "ok" }`).
    * Root status endpoint: `GET /`.
+   * Available seats: `GET /events/{eventId}/tickets/available`.
+   * Seat availability: `GET /events/{eventId}/tickets/{ticketId}/availability`.
+   * Seat purchase: `POST /events/{eventId}/tickets/{ticketId}/purchase` with body `{ "fullName", "email" }` and header `X-Idempotency-Key` (201 created, 200 idempotent replay, 400, 404, 409 seat sold or key reused).
 
-4. **Code Quality & Formatting:**
+6. **Run the tests** (Docker must be running; integration tests start their own PostgreSQL container):
+   ```bash
+   dotnet test
+   ```
+
+7. **Code Quality & Formatting:**
    * Verify formatting (lint check):
      ```bash
      dotnet format --verify-no-changes
@@ -62,7 +84,7 @@ booking-service/
      dotnet format
      ```
 
-5. **Generate OpenAPI Specification (Contract):**
+8. **Generate OpenAPI Specification (Contract):**
    * Restore local tools:
      ```bash
      dotnet tool restore
