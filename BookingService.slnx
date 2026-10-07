@@ -3,5 +3,6 @@
   <Project Path="BookingService.Application/BookingService.Application.csproj" />
   <Project Path="BookingService.Application.Tests/BookingService.Application.Tests.csproj" />
   <Project Path="BookingService.Domain/BookingService.Domain.csproj" />
+  <Project Path="BookingService.Infrastructure.Tests/BookingService.Infrastructure.Tests.csproj" />
   <Project Path="BookingService.Infrastructure/BookingService.Infrastructure.csproj" />
 </Solution>
