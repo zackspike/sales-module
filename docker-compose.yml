@@ -18,5 +18,21 @@ services:
       timeout: 5s
       retries: 10
 
+  booking-service-cache:
+    image: redis:7-alpine
+    container_name: booking-service-cache
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${BOOKING_CACHE_PORT:-6381}:6379"
+    volumes:
+      - booking-service-cache-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   booking-service-database-data:
+  booking-service-cache-data:
