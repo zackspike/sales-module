@@ -1,10 +1,8 @@
 using BookingService.Api.Common;
 using BookingService.Api.Endpoints;
-using BookingService.Application.Repositories;
 using BookingService.Application.Tickets;
 using BookingService.Application.Tickets.Queries;
 using BookingService.Infrastructure;
-using BookingService.Infrastructure.Repositories;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,13 +28,11 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddSingleton<BookingMemoryStore>();
-builder.Services.AddSingleton<ITicketRepository>(_ => new InMemoryTicketRepository(seedDefaultInventory: true));
-builder.Services.AddSingleton<IEventCatalog>(_ => new InMemoryEventCatalog());
-builder.Services.AddTransient<TicketPurchaseValidator>();
-builder.Services.AddTransient<PurchaseTicketHandler>();
-builder.Services.AddTransient<GetAvailableTicketsHandler>();
-builder.Services.AddTransient<CheckTicketAvailabilityHandler>();
+builder.Services.AddInfrastructure();
+builder.Services.AddScoped<TicketPurchaseValidator>();
+builder.Services.AddScoped<PurchaseTicketHandler>();
+builder.Services.AddScoped<GetAvailableTicketsHandler>();
+builder.Services.AddScoped<CheckTicketAvailabilityHandler>();
 
 var app = builder.Build();
 
@@ -62,3 +58,6 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapBookingEndpoints();
 
 app.Run();
+
+// Exposes the entry point to WebApplicationFactory in the integration tests.
+public partial class Program;

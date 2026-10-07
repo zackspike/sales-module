@@ -1,4 +1,5 @@
 using System.Net.Mail;
+using BookingService.Application.Repositories;
 
 namespace BookingService.Application.Tickets;
 
@@ -11,14 +12,16 @@ public sealed class TicketPurchaseValidator
     // RFC 5321 maximum length of a forward-path.
     private const int MaxEmailLength = 254;
 
-    private readonly IEventCatalog _events;
+    private readonly IEventRepository _events;
 
-    public TicketPurchaseValidator(IEventCatalog events)
+    public TicketPurchaseValidator(IEventRepository events)
     {
         _events = events;
     }
 
-    public TicketPurchaseValidationResult Validate(PurchaseTicketCommand command)
+    public async Task<TicketPurchaseValidationResult> ValidateAsync(
+        PurchaseTicketCommand command,
+        CancellationToken cancellationToken = default)
     {
         var errors = new Dictionary<string, string[]>();
 
@@ -41,7 +44,7 @@ public sealed class TicketPurchaseValidator
             return TicketPurchaseValidationResult.Invalid(errors);
         }
 
-        return _events.Exists(command.EventId)
+        return await _events.ExistsAsync(command.EventId, cancellationToken)
             ? TicketPurchaseValidationResult.Valid()
             : TicketPurchaseValidationResult.EventNotFound();
     }

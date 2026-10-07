@@ -1,21 +1,26 @@
 namespace BookingService.Domain;
 
 /// <summary>
-/// Domain factory that generates the initial seat/ticket inventory for an event (SP-03 / DOM-03).
+/// Domain factory that generates the initial seat/ticket inventory of an event zone (SP-03 / DOM-03).
 /// </summary>
 public static class EventInventoryFactory
 {
-    public static IReadOnlyList<Ticket> CreateInitialInventory(Event @event, string rowPrefix = "A")
+    /// <summary>
+    /// Creates <paramref name="totalSeats"/> seats ("{rowPrefix}-1".."{rowPrefix}-N") in
+    /// <paramref name="zone"/>, each with its own available ticket.
+    /// </summary>
+    public static IReadOnlyList<Ticket> CreateInitialInventory(Zone zone, int totalSeats, string rowPrefix = "A")
     {
-        ArgumentNullException.ThrowIfNull(@event);
-        return CreateInitialInventory(@event.Id, @event.TotalSeats, rowPrefix);
-    }
+        ArgumentNullException.ThrowIfNull(zone);
 
-    public static IReadOnlyList<Ticket> CreateInitialInventory(Guid eventId, int totalSeats, string rowPrefix = "A")
-    {
-        if (eventId == Guid.Empty)
+        if (zone.Id == Guid.Empty)
         {
-            throw new ArgumentException("EventId must not be empty.", nameof(eventId));
+            throw new ArgumentException("ZoneId must not be empty.", nameof(zone));
+        }
+
+        if (zone.EventId == Guid.Empty)
+        {
+            throw new ArgumentException("EventId must not be empty.", nameof(zone));
         }
 
         if (totalSeats <= 0)
@@ -28,11 +33,19 @@ public static class EventInventoryFactory
 
         for (var i = 1; i <= totalSeats; i++)
         {
+            var seat = new Seat
+            {
+                Id = Guid.NewGuid(),
+                ZoneId = zone.Id,
+                Zone = zone,
+                SeatNumber = $"{rowPrefix}-{i}"
+            };
+
             tickets.Add(new Ticket
             {
                 Id = Guid.NewGuid(),
-                EventId = eventId,
-                SeatNumber = $"{rowPrefix}-{i}",
+                SeatId = seat.Id,
+                Seat = seat,
                 Status = TicketStatus.Available,
                 CreatedAtUtc = now
             });

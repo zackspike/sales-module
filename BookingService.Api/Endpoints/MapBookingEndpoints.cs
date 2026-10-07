@@ -1,6 +1,6 @@
 using BookingService.Api.Dtos;
-using BookingService.Application.Repositories;
 using BookingService.Application.Tickets;
+using BookingService.Application.Tickets.Queries;
 using BookingService.Domain;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,56 +10,80 @@ public static class BookingEndpoints
 {
     public static void MapBookingEndpoints(this WebApplication app)
     {
-        // SP-05: POST /events/{eventId}/tickets
-        app.MapPost("/events/{eventId:guid}/tickets", (
+        // SP-04 / APP-01: GET /events/{eventId}/tickets/available
+        app.MapGet("/events/{eventId:guid}/tickets/available", async (
             Guid eventId,
-            PurchaseTicketCommand command,
-            [FromHeader(Name = "X-Idempotency-Key")] Guid? idempotencyHeader,
-            TicketPurchaseValidator validator,
-            ITicketRepository ticketRepository) =>
+            GetAvailableTicketsHandler handler,
+            CancellationToken cancellationToken) =>
         {
-            // 1. Validar usando el validador oficial de la capa Application (VAL-02)
-            var validation = validator.Validate(command with { EventId = eventId });
-            if (!validation.IsValid)
-            {
-                if (validation.Status == TicketPurchaseValidationStatus.EventNotFound)
-                {
-                    return Results.NotFound(new { error = $"Event with id '{eventId}' not found." });
-                }
+            var seats = await handler.HandleAsync(new GetAvailableTicketsQuery(eventId), cancellationToken);
 
-                return Results.BadRequest(new { errors = validation.Errors });
-            }
-
-            // 2. Resolver idempotencia (SP-06)
-            var idempotencyKey = idempotencyHeader ?? Guid.NewGuid();
-
-            // 3. Generar ticket con el generador de dominio sin truncar (VAL-03 / SP-08)
-            var newTicket = new Ticket
-            {
-                Id = Guid.NewGuid(),
-                EventId = eventId,
-                FullName = command.FullName!.Trim(),
-                Email = command.Email!.Trim(),
-                TicketCode = TicketCodeGenerator.Generate(),
-                IdempotencyKey = idempotencyKey,
-                CreatedAtUtc = DateTime.UtcNow
-            };
-
-            var ticket = ticketRepository.GetOrAdd(idempotencyKey, newTicket, out var wasCreated);
-
-            // 4. Retornar DTO del ticket (SP-07)
-            var response = new TicketDto(
-                ticket.Id,
-                ticket.EventId,
-                ticket.FullName,
-                ticket.Email,
-                ticket.TicketCode,
-                ticket.CreatedAtUtc
-            );
-
-            return wasCreated
-                ? Results.Created($"/events/{eventId}/tickets/{ticket.Id}", response)
-                : Results.Ok(response);
+            return seats is null
+                ? Results.NotFound(new { error = $"Event with id '{eventId}' not found." })
+                : Results.Ok(seats);
         });
+
+        // SP-04 / API-03: GET /events/{eventId}/tickets/{ticketId}/availability
+        app.MapGet("/events/{eventId:guid}/tickets/{ticketId:guid}/availability", async (
+            Guid eventId,
+            Guid ticketId,
+            CheckTicketAvailabilityHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var seat = await handler.HandleAsync(new CheckTicketAvailabilityQuery(eventId, ticketId), cancellationToken);
+
+            return seat is null
+                ? Results.NotFound(new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." })
+                : Results.Ok(seat);
+        });
+
+        // SP-05 / SP-06 / APP-04: POST /events/{eventId}/tickets/{ticketId}/purchase
+        app.MapPost("/events/{eventId:guid}/tickets/{ticketId:guid}/purchase", async (
+            Guid eventId,
+            Guid ticketId,
+            PurchaseTicketRequest request,
+            [FromHeader(Name = "X-Idempotency-Key")] Guid? idempotencyKey,
+            PurchaseTicketHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var command = new PurchaseTicketCommand(
+                eventId,
+                ticketId,
+                request.FullName,
+                request.Email,
+                idempotencyKey ?? Guid.Empty);
+
+            var result = await handler.HandleAsync(command, cancellationToken);
+
+            return result.Status switch
+            {
+                PurchaseTicketStatus.Purchased => Results.Created(
+                    $"/events/{eventId}/tickets/{ticketId}",
+                    ToDto(result.Ticket!)),
+                PurchaseTicketStatus.Replayed => Results.Ok(ToDto(result.Ticket!)),
+                PurchaseTicketStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
+                PurchaseTicketStatus.EventNotFound => Results.NotFound(
+                    new { error = $"Event with id '{eventId}' not found." }),
+                PurchaseTicketStatus.TicketNotFound => Results.NotFound(
+                    new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." }),
+                PurchaseTicketStatus.AlreadySold => Results.Conflict(
+                    new { error = "The requested seat has already been purchased." }),
+                PurchaseTicketStatus.IdempotencyKeyConflict => Results.Conflict(
+                    new { error = "X-Idempotency-Key was already used to purchase a different seat." }),
+                _ => throw new InvalidOperationException($"Unexpected purchase status '{result.Status}'.")
+            };
+        });
+    }
+
+    private static TicketDto ToDto(Ticket ticket)
+    {
+        return new TicketDto(
+            ticket.Id,
+            ticket.Seat!.Zone!.EventId,
+            ticket.Seat.SeatNumber,
+            ticket.User!.FullName,
+            ticket.User.Email,
+            ticket.TicketCode!,
+            ticket.PurchasedAtUtc!.Value);
     }
 }

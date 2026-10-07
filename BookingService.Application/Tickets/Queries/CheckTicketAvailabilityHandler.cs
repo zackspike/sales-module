@@ -9,25 +9,27 @@ namespace BookingService.Application.Tickets.Queries;
 public sealed class CheckTicketAvailabilityHandler
 {
     private readonly ITicketRepository _tickets;
-    private readonly IEventCatalog _eventCatalog;
+    private readonly IEventRepository _events;
 
-    public CheckTicketAvailabilityHandler(ITicketRepository tickets, IEventCatalog eventCatalog)
+    public CheckTicketAvailabilityHandler(ITicketRepository tickets, IEventRepository events)
     {
         _tickets = tickets;
-        _eventCatalog = eventCatalog;
+        _events = events;
     }
 
     /// <summary>
     /// Returns the availability information for the seat, or null if the event or ticket is not found.
     /// </summary>
-    public SeatAvailabilityDto? Handle(CheckTicketAvailabilityQuery query)
+    public async Task<SeatAvailabilityDto?> HandleAsync(
+        CheckTicketAvailabilityQuery query,
+        CancellationToken cancellationToken = default)
     {
-        if (!_eventCatalog.Exists(query.EventId))
+        if (!await _events.ExistsAsync(query.EventId, cancellationToken))
         {
             return null;
         }
 
-        var ticket = _tickets.GetById(query.EventId, query.TicketId);
+        var ticket = await _tickets.GetByIdAsync(query.EventId, query.TicketId, cancellationToken);
         if (ticket is null)
         {
             return null;
@@ -35,7 +37,7 @@ public sealed class CheckTicketAvailabilityHandler
 
         return new SeatAvailabilityDto(
             ticket.Id,
-            ticket.SeatNumber,
+            ticket.Seat!.SeatNumber,
             ticket.Status.ToString());
     }
 }

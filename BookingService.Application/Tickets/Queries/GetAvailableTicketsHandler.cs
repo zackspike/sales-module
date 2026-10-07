@@ -1,6 +1,5 @@
 using BookingService.Application.Repositories;
 using BookingService.Application.Tickets.Dtos;
-using BookingService.Domain;
 
 namespace BookingService.Application.Tickets.Queries;
 
@@ -10,28 +9,31 @@ namespace BookingService.Application.Tickets.Queries;
 public sealed class GetAvailableTicketsHandler
 {
     private readonly ITicketRepository _tickets;
-    private readonly IEventCatalog _eventCatalog;
+    private readonly IEventRepository _events;
 
-    public GetAvailableTicketsHandler(ITicketRepository tickets, IEventCatalog eventCatalog)
+    public GetAvailableTicketsHandler(ITicketRepository tickets, IEventRepository events)
     {
         _tickets = tickets;
-        _eventCatalog = eventCatalog;
+        _events = events;
     }
 
     /// <summary>
     /// Returns the list of available tickets, or null if the event does not exist.
     /// </summary>
-    public IReadOnlyList<SeatAvailabilityDto>? Handle(GetAvailableTicketsQuery query)
+    public async Task<IReadOnlyList<SeatAvailabilityDto>?> HandleAsync(
+        GetAvailableTicketsQuery query,
+        CancellationToken cancellationToken = default)
     {
-        if (!_eventCatalog.Exists(query.EventId))
+        if (!await _events.ExistsAsync(query.EventId, cancellationToken))
         {
             return null;
         }
 
-        return _tickets.GetByEvent(query.EventId)
-            .Where(t => t.Status == TicketStatus.Available)
-            .OrderBy(t => t.SeatNumber, StringComparer.OrdinalIgnoreCase)
-            .Select(t => new SeatAvailabilityDto(t.Id, t.SeatNumber, t.Status.ToString()))
+        var tickets = await _tickets.GetAvailableByEventAsync(query.EventId, cancellationToken);
+
+        return tickets
+            .OrderBy(t => t.Seat!.SeatNumber, StringComparer.OrdinalIgnoreCase)
+            .Select(t => new SeatAvailabilityDto(t.Id, t.Seat!.SeatNumber, t.Status.ToString()))
             .ToList();
     }
 }

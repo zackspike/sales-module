@@ -2,51 +2,39 @@ using BookingService.Domain;
 
 namespace BookingService.Application.Repositories;
 
+/// <summary>
+/// Access to the ticket inventory. Every returned ticket has its <see cref="Ticket.Seat"/>
+/// (with <see cref="Seat.Zone"/>) and, when sold, its <see cref="Ticket.User"/> loaded.
+/// Changes are persisted by <see cref="IUnitOfWork.SaveChangesAsync"/>.
+/// </summary>
 public interface ITicketRepository
 {
     /// <summary>
-    /// Creates <paramref name="ticket"/> the first time <paramref name="idempotencyKey"/> is seen.
-    /// Any later call with the same key returns the ticket created on that first call instead of
-    /// creating a new one, so retried/duplicated "create ticket" requests are safe to repeat.
-    /// This is the only way to create a ticket; there is no separate non-idempotent Add.
-    /// </summary>
-    Ticket GetOrAdd(Guid idempotencyKey, Ticket ticket, out bool wasCreated);
-
-    /// <summary>
     /// Adds the ticket inventory (seats) of event <paramref name="eventId"/> (SP-03 / INF-01).
-    /// Every ticket must belong to that event and have an id not already stored; otherwise
-    /// nothing is added and an <see cref="ArgumentException"/> is thrown.
+    /// Every ticket must have a seat whose zone belongs to that event; otherwise nothing is
+    /// added and an <see cref="ArgumentException"/> is thrown.
     /// </summary>
     void AddRange(Guid eventId, IEnumerable<Ticket> tickets);
 
     /// <summary>
-    /// Returns a snapshot of the tickets of event <paramref name="eventId"/>; empty if the event has none.
+    /// Returns the tickets of event <paramref name="eventId"/> that are still available; empty if none.
     /// </summary>
-    IReadOnlyCollection<Ticket> GetByEvent(Guid eventId);
+    Task<IReadOnlyList<Ticket>> GetAvailableByEventAsync(Guid eventId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Returns ticket <paramref name="ticketId"/> only if it belongs to event <paramref name="eventId"/>.
     /// </summary>
-    Ticket? GetById(Guid eventId, Guid ticketId);
+    Task<Ticket?> GetByIdAsync(Guid eventId, Guid ticketId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Runs <paramref name="purchase"/> on seat <paramref name="ticketId"/> of event
-    /// <paramref name="eventId"/> at most once per <paramref name="idempotencyKey"/>.
-    /// The key lookup, the seat lookup, the purchase and the key registration happen
-    /// atomically, so two concurrent buyers can't both acquire the same seat.
-    /// If <paramref name="purchase"/> throws, the key is not registered and the exception propagates.
+    /// Same as <see cref="GetByIdAsync"/> but locks the ticket row until the current transaction
+    /// ends, so two concurrent buyers of the same seat are serialized. Must be called inside
+    /// <see cref="IUnitOfWork.ExecuteInTransactionAsync{TResult}"/>.
     /// </summary>
-    TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase);
+    Task<Ticket?> GetForPurchaseAsync(Guid eventId, Guid ticketId, CancellationToken cancellationToken = default);
 
-    Ticket? GetById(Guid id);
-    IReadOnlyCollection<Ticket> GetAll();
-    Ticket Update(Ticket ticket);
-    bool Remove(Guid id);
+    /// <summary>
+    /// Returns the ticket bought with <paramref name="idempotencyKey"/>, or null if the key was never used.
+    /// </summary>
+    Task<Ticket?> GetByIdempotencyKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken = default);
 }
-
-/// <summary>
-/// Result of <see cref="ITicketRepository.PurchaseOnce"/>. <see cref="Ticket"/> is null when the
-/// seat does not exist in the event. When the key was already used, <see cref="Replayed"/> is true
-/// and <see cref="Ticket"/> is the ticket bought with it (which may be a different seat).
-/// </summary>
-public sealed record TicketPurchaseOutcome(Ticket? Ticket, bool Replayed);

@@ -13,4 +13,5 @@ public class Event
     public string VenueName { get; set; } = string.Empty;
     public DateTime Date { get; set; }
     public int TotalSeats { get; set; }
+    public List<Zone> Zones { get; set; } = [];
 }
