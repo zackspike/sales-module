@@ -1,0 +1,22 @@
+services:
+  booking-service-database:
+    image: postgres:17-alpine
+    container_name: booking-service-database
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${BOOKING_DB_NAME:-booking_service}
+      POSTGRES_USER: ${BOOKING_DB_USER:-booking_service}
+      POSTGRES_PASSWORD: ${BOOKING_DB_PASSWORD:-booking_dev_password}
+    ports:
+      - "${BOOKING_DB_PORT:-5434}:5432"
+    volumes:
+      - booking-service-database-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  booking-service-database-data:
