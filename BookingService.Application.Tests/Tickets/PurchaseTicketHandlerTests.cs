@@ -1,6 +1,6 @@
-using BookingService.Application.Repositories;
-using BookingService.Application.Tickets;
-using BookingService.Domain;
+using BookingService.Application.Abstractions;
+using BookingService.Application.Tickets.Commands;
+using BookingService.Domain.Tickets;
 
 namespace BookingService.Application.Tests.Tickets;
 
@@ -177,20 +177,10 @@ public class PurchaseTicketHandlerTests
             }
         }
 
-        public Ticket GetOrAdd(Guid idempotencyKey, Ticket ticket, out bool wasCreated) => throw new NotSupportedException();
-
         public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
 
         public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId) => throw new NotSupportedException();
 
         public Ticket? GetById(Guid eventId, Guid ticketId) => throw new NotSupportedException();
-
-        public Ticket? GetById(Guid id) => throw new NotSupportedException();
-
-        public IReadOnlyCollection<Ticket> GetAll() => throw new NotSupportedException();
-
-        public Ticket Update(Ticket ticket) => throw new NotSupportedException();
-
-        public bool Remove(Guid id) => throw new NotSupportedException();
     }
 }

@@ -1,4 +1,5 @@
-using BookingService.Application.Tickets;
+using BookingService.Application.Abstractions;
+using BookingService.Application.Tickets.Commands;
 
 namespace BookingService.Application.Tests.Tickets;
 
