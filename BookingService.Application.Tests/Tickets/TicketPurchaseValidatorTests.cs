@@ -1,7 +1,7 @@
 using BookingService.Application.Abstractions;
 using BookingService.Application.Tickets.Commands;
 
-namespace BookingService.Application.Tests.Application;
+namespace BookingService.Application.Tests.Tickets;
 
 public class TicketPurchaseValidatorTests
 {

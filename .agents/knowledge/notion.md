@@ -69,10 +69,10 @@
     "seatNumber": "A-1",
     "fullName": "Jane Doe",
     "email": "jane.doe@example.com",
-    "createdAt": "2026-09-20T18:00:00Z"
+    "purchasedAtUtc": "2026-09-20T18:00:00Z"
   }
   ```
-  *(Note: Field `createdAt` is explicitly serialized as camelCase via `[property: JsonPropertyName("createdAt")]` in `TicketResponse` and holds the purchase time)*.
+  *(Note: `purchasedAtUtc` mirrors `Ticket.PurchasedAtUtc` and holds the purchase time; `Ticket.CreatedAtUtc` is the seat generation time and is not exposed)*.
 
 ---
 
@@ -119,7 +119,7 @@
 | `SETUP-BS-T3` | Global Exception Middleware | Api | **Listo** | Centralized error handling retornando JSON y mapeo de HTTP 400. |
 | `MOCK-01` | Entity Modeling | Domain | **Listo** | Modelos de dominio `Ticket.cs` y `Event.cs`. |
 | `MOCK-02` | `InMemoryBookingStore` | Infrastructure | **Listo** | `InMemoryTicketRepository` thread-safe e `InMemoryEventCatalog` con eventos precargados. |
-| `VAL-01` | Request & Response DTOs | Application / Api | **Listo** | `PurchaseTicketCommand`, `PurchaseTicketRequest` y `TicketResponse` con serialización `"createdAt"`. |
+| `VAL-01` | Request & Response DTOs | Application / Api | **Listo** | `PurchaseTicketCommand`, `PurchaseTicketRequest` y `TicketResponse` con serialización `"purchasedAtUtc"`. |
 | `VAL-02` | Purchase Validations | Application | **Listo** | `TicketPurchaseValidator` con suite xUnit (400 required/email, 404 event). |
 | `VAL-03` | Unique Ticket Code Generator | Domain | **Listo** | `TicketCodeGenerator` ("TK-{GUID:N}") con tests de concurrencia masiva. |
 | `API-01` | `POST /events/{eventId}/tickets/{ticketId}/purchase` | Api | **Listo / Integrado** | Endpoint en `Endpoints/TicketEndpoints.cs` delegando a `PurchaseTicketHandler`. |

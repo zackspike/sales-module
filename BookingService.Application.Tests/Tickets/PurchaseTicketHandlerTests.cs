@@ -2,7 +2,7 @@ using BookingService.Application.Abstractions;
 using BookingService.Application.Tickets.Commands;
 using BookingService.Domain.Tickets;
 
-namespace BookingService.Application.Tests.Application;
+namespace BookingService.Application.Tests.Tickets;
 
 public class PurchaseTicketHandlerTests
 {
