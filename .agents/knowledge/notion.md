@@ -34,20 +34,30 @@
   * Schema in `database/init/001_create_booking_schema.sql` (`events`, `event_zones`, `zone_seats`, `users`, `tickets`), mapped by EF Core without migrations.
   * Seed in `database/init/002_seed_default_event.sql`: test event ID `11111111-1111-1111-1111-111111111111` with 50 seats `A-1`..`A-50`.
   * ACID purchases: `IUnitOfWork` transaction (READ COMMITTED) + `SELECT ... FOR UPDATE` on the ticket row + unique constraints (seat, ticket code, idempotency key, user email).
+* **Hot-path Strategy:** **Redis (docker compose, `booking-service-cache`)** in front of PostgreSQL:
+  * Seat locks `booking:seat-lock:{ticketId} = {userId}` with a 10 minute TTL (`SeatReservationPolicy.LockDuration`), acquired/released atomically with Lua scripts (`ISeatLockStore`).
+  * Idempotency `booking:idempotency:{key} = {eventId, ticketId}` with a 10 minute TTL (`IIdempotencyStore`); the database unique key stays as the durable backstop.
+  * Available seats cache `booking:event:{eventId}:available-seats` (JSON, 30 s TTL, invalidated on every sale) (`IAvailableSeatsCache`); locked seats are filtered out at read time.
 * **Documentation & Testing:**
   * Minimal APIs with OpenAPI / Swagger UI support (`/swagger`).
   * Integration testing via `.http` file (`BookingService.Api.http`).
   * Unit and concurrency testing with xUnit (`BookingService.Application.Tests`).
-  * PostgreSQL integration and HTTP tests with Testcontainers (`BookingService.Infrastructure.Tests`).
-  * PostgreSQL integration and HTTP tests with Testcontainers (`BookingService.Infrastructure.Tests`).
+  * PostgreSQL + Redis integration and HTTP tests with Testcontainers (`BookingService.Infrastructure.Tests`).
 
 ---
 
 ## 3. Detailed Functional Requirements (Sap-atitos / BookingService)
 
+### Requirement: Seat Reservation (Redis lock, prerequisite of SP-05)
+
+* **Endpoint:** `POST /events/{eventId:guid}/tickets/{ticketId:guid}/reserve` with body `{ "fullName", "email" }`.
+* **Behavior:** checks `available` in PostgreSQL, registers the buyer by email and locks the seat for that buyer for 10 minutes. Renewing by the same buyer extends the lock.
+* **Responses:** **200 OK** `{ ticketId, eventId, seatNumber, userId, expiresAtUtc }`; **400** invalid body; **404** unknown event/seat; **409 Conflict** seat sold or reserved by another buyer.
+* While locked, the seat is missing from `GET .../tickets/available` and `GET .../{ticketId}/availability` reports `"Reserved"`.
+
 ### Requirement: SP-05 — Ticket Purchase Endpoint
 
-* **Endpoint:** `POST /events/{eventId:guid}/tickets/{ticketId:guid}/purchase` (seat purchase; seats listed by `GET /events/{eventId}/tickets/available`)
+* **Endpoint:** `POST /events/{eventId:guid}/tickets/{ticketId:guid}/purchase` (seat purchase; requires a current reservation of the seat by the same email)
 * **Authentication:** None (public endpoint).
 * **Route Parameters:** `eventId` (GUID of the target event) and `ticketId` (GUID of the seat ticket; 404 if it does not belong to the event).
 * **Request Payload (JSON):**
@@ -60,6 +70,7 @@
 * **Validations & Error Responses:**
   * **400 Bad Request:** If `fullName` or `email` is missing, empty, or if `email` is not a valid email format (RFC 5321). The response body returns an `errors` dictionary indicating failing field(s).
   * **404 Not Found:** If `eventId` does not match any event stored in the database (`IEventRepository`).
+  * **403 Forbidden:** If the buyer does not hold a current reservation of the seat (never reserved, reserved by someone else, or expired).
   * **409 Conflict:** If the seat is already sold, or the idempotency key was already used for a different seat.
 * **Success Response (201 Created on new issuance, or 200 OK on idempotent replay):**
   ```json
@@ -85,6 +96,7 @@
 * **Behavior:**
   * Exactly one ticket is created per unique idempotency key.
   * Replaying a request with an already-processed key returns the previously issued ticket (**200 OK**) without creating a second ticket.
+  * Duplicates are answered first from Redis (`IIdempotencyStore`, 10 minute TTL) without opening a database transaction.
   * Atomically enforced in the purchase transaction (`PurchaseTicketHandler` + `IUnitOfWork`) and by the unique constraint on `tickets.purchase_idempotency_key`.
 
 ---

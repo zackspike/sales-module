@@ -7,7 +7,7 @@ Backend service responsible for ticket purchasing, idempotency handling, and uni
 
 ## Requirements
 * [.NET 8.0+ SDK](https://dotnet.microsoft.com/download) (Compatible with .NET 8, 9 and 10)
-* [Docker](https://www.docker.com/) with Docker Compose (PostgreSQL database and integration tests)
+* [Docker](https://www.docker.com/) with Docker Compose (PostgreSQL database, Redis cache and integration tests)
 
 ---
 
@@ -22,11 +22,11 @@ booking-service/
 ├── BookingService.Api/            # Minimal APIs, endpoints, middleware, HTTP models
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
 ├── BookingService.Domain/         # Core business entities (Event, Zone, Seat, User, Ticket), domain rules
-├── BookingService.Infrastructure/ # PostgreSQL persistence (EF Core DbContext, repositories, unit of work)
+├── BookingService.Infrastructure/ # PostgreSQL persistence (EF Core, repositories, unit of work) and Redis stores
 ├── BookingService.Application.Tests/    # Unit tests (domain, validators, handlers with fakes)
-├── BookingService.Infrastructure.Tests/ # Integration tests against PostgreSQL (Testcontainers) and the HTTP API
+├── BookingService.Infrastructure.Tests/ # Integration tests against PostgreSQL + Redis (Testcontainers) and the HTTP API
 ├── database/init/                 # SQL schema and seed scripts (source of truth of the database structure)
-├── docker-compose.yml             # Local PostgreSQL database
+├── docker-compose.yml             # Local PostgreSQL database and Redis cache
 ├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
 ├── .agents/                       # Agent workflows, specifications (Notion), and MCP integrations
 ├── AGENTS.md                      # Global architecture rules & agent workflow protocol
@@ -42,7 +42,7 @@ booking-service/
    git config core.hooksPath .githooks
    ```
 
-2. **Start the PostgreSQL database:**
+2. **Start the PostgreSQL database and the Redis cache:**
    ```bash
    docker compose up -d
    ```
@@ -50,6 +50,7 @@ booking-service/
    * On the first start it runs `database/init/001_create_booking_schema.sql` (tables `events`, `event_zones`, `zone_seats`, `users`, `tickets`) and `002_seed_default_event.sql` (event `11111111-1111-1111-1111-111111111111` with 50 seats `A-1`..`A-50`).
    * To recreate the database from the scripts: `docker compose down -v && docker compose up -d`.
    * The API reads the connection string `ConnectionStrings:BookingDatabase` (set in `appsettings.Development.json`; use the `ConnectionStrings__BookingDatabase` environment variable elsewhere).
+   * Redis (`booking-service-cache`) listens on `127.0.0.1:6381` (override with `BOOKING_CACHE_PORT`) and is read from `ConnectionStrings:BookingCache`. It holds the 10 minute seat locks, the idempotency keys (10 minute TTL) and the available seats cache (30 s TTL). Use `127.0.0.1` rather than `localhost`: on Windows `localhost` may resolve to IPv6, which the Docker port forward does not answer.
 
 3. **Restore dependencies and build:**
    ```bash
@@ -65,11 +66,12 @@ booking-service/
    * Swagger UI will be available at: `http://localhost:<port>/swagger` (in Development mode).
    * Health check endpoint: `GET /health` (returns `{ "status": "ok" }`).
    * Root status endpoint: `GET /`.
-   * Available seats: `GET /events/{eventId}/tickets/available`.
-   * Seat availability: `GET /events/{eventId}/tickets/{ticketId}/availability`.
-   * Seat purchase: `POST /events/{eventId}/tickets/{ticketId}/purchase` with body `{ "fullName", "email" }` and header `X-Idempotency-Key` (201 created, 200 idempotent replay, 400, 404, 409 seat sold or key reused).
+   * Available seats: `GET /events/{eventId}/tickets/available` (seats reserved by someone are left out).
+   * Seat availability: `GET /events/{eventId}/tickets/{ticketId}/availability` (`Available`, `Reserved` or `Sold`).
+   * Seat reservation: `POST /events/{eventId}/tickets/{ticketId}/reserve` with body `{ "fullName", "email" }` locks the seat for that buyer during 10 minutes (200, 400, 404, 409 seat sold or reserved by another buyer).
+   * Seat purchase: `POST /events/{eventId}/tickets/{ticketId}/purchase` with body `{ "fullName", "email" }` (same email as the reservation) and header `X-Idempotency-Key` (201 created, 200 idempotent replay, 400, 403 no current reservation by this buyer, 404, 409 seat sold or key reused).
 
-6. **Run the tests** (Docker must be running; integration tests start their own PostgreSQL container):
+6. **Run the tests** (Docker must be running; integration tests start their own PostgreSQL and Redis containers):
    ```bash
    dotnet test
    ```
