@@ -1,4 +1,5 @@
 using BookingService.Application.Repositories;
+using BookingService.Application.Tickets;
 using BookingService.Domain;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -6,20 +7,22 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Testcontainers.PostgreSql;
+using Testcontainers.Redis;
 
 namespace BookingService.Infrastructure.Tests;
 
 /// <summary>
-/// Starts a throwaway PostgreSQL container, applies the scripts in <c>database/init</c> (the same
-/// ones the docker compose database runs) and hosts the API against it. Shared by every test in
-/// the <see cref="PostgreSqlCollection"/>; tests that buy seats create their own event so they
+/// Starts throwaway PostgreSQL and Redis containers, applies the scripts in <c>database/init</c>
+/// (the same ones the docker compose database runs) and hosts the API against them. Shared by every
+/// test in the <see cref="InfrastructureCollection"/>; tests that buy seats create their own event so they
 /// never depend on each other.
 /// </summary>
-public sealed class PostgreSqlFixture : IAsyncLifetime
+public sealed class InfrastructureFixture : IAsyncLifetime
 {
     public static readonly Guid DefaultEventId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
+    private readonly RedisContainer _redis = new RedisBuilder("redis:7-alpine").Build();
 
     public string ConnectionString => _container.GetConnectionString();
 
@@ -27,7 +30,7 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _container.StartAsync();
+        await Task.WhenAll(_container.StartAsync(), _redis.StartAsync());
         await ApplyInitScriptsAsync();
 
         Api = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -36,7 +39,8 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
             builder.ConfigureAppConfiguration((_, configuration) =>
                 configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    [$"ConnectionStrings:{DependencyInjection.ConnectionStringName}"] = ConnectionString
+                    [$"ConnectionStrings:{DependencyInjection.ConnectionStringName}"] = ConnectionString,
+                    [$"ConnectionStrings:{DependencyInjection.CacheConnectionStringName}"] = _redis.GetConnectionString()
                 }));
         });
     }
@@ -45,6 +49,7 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
     {
         await Api.DisposeAsync();
         await _container.DisposeAsync();
+        await _redis.DisposeAsync();
     }
 
     /// <summary>
@@ -79,6 +84,17 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
         return new SeededEvent(@event.Id, tickets.Select(t => t.Id).ToList());
     }
 
+    /// <summary>
+    /// Runs the reservation step (seat lock in Redis) in its own scope, like a separate HTTP request.
+    /// </summary>
+    public async Task<ReserveSeatResult> ReserveAsync(Guid eventId, Guid ticketId, string email)
+    {
+        await using var scope = CreateScope();
+        var handler = scope.ServiceProvider.GetRequiredService<ReserveSeatHandler>();
+
+        return await handler.HandleAsync(new ReserveSeatCommand(eventId, ticketId, "Juan Perez", email));
+    }
+
     public async Task<T> QueryScalarAsync<T>(string sql, params (string Name, object Value)[] parameters)
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
@@ -110,7 +126,7 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
 public sealed record SeededEvent(Guid EventId, IReadOnlyList<Guid> TicketIds);
 
 [CollectionDefinition(Name)]
-public sealed class PostgreSqlCollection : ICollectionFixture<PostgreSqlFixture>
+public sealed class InfrastructureCollection : ICollectionFixture<InfrastructureFixture>
 {
-    public const string Name = "PostgreSQL";
+    public const string Name = "Infrastructure";
 }

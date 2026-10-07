@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BookingService.Infrastructure.Tests;
 
-[Collection(PostgreSqlCollection.Name)]
-public class RepositoryTests(PostgreSqlFixture database)
+[Collection(InfrastructureCollection.Name)]
+public class RepositoryTests(InfrastructureFixture database)
 {
     [Fact]
     public async Task Seed_script_creates_the_default_event_with_50_available_seats()
@@ -16,8 +16,8 @@ public class RepositoryTests(PostgreSqlFixture database)
         var events = scope.ServiceProvider.GetRequiredService<IEventRepository>();
         var tickets = scope.ServiceProvider.GetRequiredService<ITicketRepository>();
 
-        var defaultEvent = await events.GetByIdAsync(PostgreSqlFixture.DefaultEventId);
-        var available = await tickets.GetAvailableByEventAsync(PostgreSqlFixture.DefaultEventId);
+        var defaultEvent = await events.GetByIdAsync(InfrastructureFixture.DefaultEventId);
+        var available = await tickets.GetAvailableByEventAsync(InfrastructureFixture.DefaultEventId);
 
         Assert.NotNull(defaultEvent);
         Assert.Equal("Rock Fest 2026", defaultEvent.Name);
@@ -38,7 +38,7 @@ public class RepositoryTests(PostgreSqlFixture database)
         var events = scope.ServiceProvider.GetRequiredService<IEventRepository>();
 
         Assert.False(await events.ExistsAsync(Guid.NewGuid()));
-        Assert.True(await events.ExistsAsync(PostgreSqlFixture.DefaultEventId));
+        Assert.True(await events.ExistsAsync(InfrastructureFixture.DefaultEventId));
     }
 
     [Fact]
