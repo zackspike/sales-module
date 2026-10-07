@@ -1,4 +1,6 @@
+using BookingService.Application.Caching;
 using BookingService.Application.Repositories;
+using BookingService.Application.Tickets.Dtos;
 using BookingService.Domain;
 
 namespace BookingService.Application.Tests.TestDoubles;
@@ -28,8 +30,13 @@ internal sealed class FakeEventRepository(params Guid[] knownEvents) : IEventRep
 {
     private readonly HashSet<Guid> _events = [.. knownEvents];
 
-    public Task<bool> ExistsAsync(Guid eventId, CancellationToken cancellationToken = default) =>
-        Task.FromResult(_events.Contains(eventId));
+    public int ExistsCalls { get; private set; }
+
+    public Task<bool> ExistsAsync(Guid eventId, CancellationToken cancellationToken = default)
+    {
+        ExistsCalls++;
+        return Task.FromResult(_events.Contains(eventId));
+    }
 
     public Task<Event?> GetByIdAsync(Guid eventId, CancellationToken cancellationToken = default) =>
         Task.FromResult(_events.Contains(eventId) ? new Event { Id = eventId } : null);
@@ -76,12 +83,14 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
     private readonly SemaphoreSlim _transactionLock = new(1, 1);
 
     public int SaveChangesCalls { get; private set; }
+    public int Transactions { get; private set; }
 
     public async Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> operation,
         CancellationToken cancellationToken = default)
     {
         await _transactionLock.WaitAsync(cancellationToken);
+        Transactions++;
         try
         {
             return await operation(cancellationToken);
@@ -97,4 +106,152 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
         SaveChangesCalls++;
         return Task.CompletedTask;
     }
+}
+
+/// <summary>
+/// In-memory seat locks without expiration; <see cref="Expire"/> simulates the TTL running out.
+/// </summary>
+internal sealed class FakeSeatLockStore : ISeatLockStore
+{
+    private readonly Dictionary<Guid, Guid> _holders = new();
+    private readonly Lock _lock = new();
+
+    public Task<SeatLockResult> TryAcquireAsync(
+        Guid ticketId,
+        Guid userId,
+        TimeSpan duration,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            if (!_holders.TryGetValue(ticketId, out var holder))
+            {
+                _holders[ticketId] = userId;
+                return Task.FromResult(SeatLockResult.Acquired);
+            }
+
+            return Task.FromResult(holder == userId ? SeatLockResult.Renewed : SeatLockResult.HeldByAnotherUser);
+        }
+    }
+
+    public Task<Guid?> GetHolderAsync(Guid ticketId, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult<Guid?>(_holders.TryGetValue(ticketId, out var holder) ? holder : null);
+        }
+    }
+
+    public Task<IReadOnlySet<Guid>> GetLockedTicketIdsAsync(
+        IReadOnlyCollection<Guid> ticketIds,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult<IReadOnlySet<Guid>>(ticketIds.Where(_holders.ContainsKey).ToHashSet());
+        }
+    }
+
+    public Task<bool> ReleaseAsync(Guid ticketId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            var released = _holders.TryGetValue(ticketId, out var holder) && holder == userId
+                && _holders.Remove(ticketId);
+            return Task.FromResult(released);
+        }
+    }
+
+    public void Expire(Guid ticketId)
+    {
+        lock (_lock)
+        {
+            _holders.Remove(ticketId);
+        }
+    }
+}
+
+internal sealed class FakeIdempotencyStore : IIdempotencyStore
+{
+    private readonly Dictionary<Guid, IdempotencyRecord> _records = new();
+    private readonly Lock _lock = new();
+
+    public bool ThrowOnRemember { get; set; }
+
+    public Task<IdempotencyRecord?> GetAsync(Guid idempotencyKey, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(_records.GetValueOrDefault(idempotencyKey));
+        }
+    }
+
+    public Task RememberAsync(
+        Guid idempotencyKey,
+        IdempotencyRecord record,
+        TimeSpan retention,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnRemember)
+        {
+            throw new InvalidOperationException("Simulated cache outage.");
+        }
+
+        lock (_lock)
+        {
+            _records[idempotencyKey] = record;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public void Forget(Guid idempotencyKey)
+    {
+        lock (_lock)
+        {
+            _records.Remove(idempotencyKey);
+        }
+    }
+}
+
+internal sealed class FakeAvailableSeatsCache : IAvailableSeatsCache
+{
+    private readonly Dictionary<Guid, IReadOnlyList<SeatAvailabilityDto>> _seats = new();
+    private readonly Lock _lock = new();
+
+    public List<Guid> Invalidations { get; } = [];
+
+    public Task<IReadOnlyList<SeatAvailabilityDto>?> GetAsync(Guid eventId, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(_seats.GetValueOrDefault(eventId));
+        }
+    }
+
+    public Task SetAsync(Guid eventId, IReadOnlyList<SeatAvailabilityDto> seats, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            _seats[eventId] = seats;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task InvalidateAsync(Guid eventId, CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            _seats.Remove(eventId);
+            Invalidations.Add(eventId);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => now;
 }

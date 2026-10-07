@@ -19,22 +19,34 @@ public sealed class TicketPurchaseValidator
         _events = events;
     }
 
-    public async Task<TicketPurchaseValidationResult> ValidateAsync(
+    public Task<TicketPurchaseValidationResult> ValidateAsync(
         PurchaseTicketCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        return ValidateAsync(command.EventId, command.FullName, command.Email, cancellationToken);
+    }
+
+    /// <summary>
+    /// Validates the buyer data and event of any step of the purchase flow (reservation or purchase).
+    /// </summary>
+    public async Task<TicketPurchaseValidationResult> ValidateAsync(
+        Guid eventId,
+        string? fullName,
+        string? email,
         CancellationToken cancellationToken = default)
     {
         var errors = new Dictionary<string, string[]>();
 
-        if (string.IsNullOrWhiteSpace(command.FullName))
+        if (string.IsNullOrWhiteSpace(fullName))
         {
             errors["fullName"] = ["fullName is required."];
         }
 
-        if (string.IsNullOrWhiteSpace(command.Email))
+        if (string.IsNullOrWhiteSpace(email))
         {
             errors["email"] = ["email is required."];
         }
-        else if (!IsValidEmail(command.Email))
+        else if (!IsValidEmail(email))
         {
             errors["email"] = ["email is not a valid email address."];
         }
@@ -44,7 +56,7 @@ public sealed class TicketPurchaseValidator
             return TicketPurchaseValidationResult.Invalid(errors);
         }
 
-        return await _events.ExistsAsync(command.EventId, cancellationToken)
+        return await _events.ExistsAsync(eventId, cancellationToken)
             ? TicketPurchaseValidationResult.Valid()
             : TicketPurchaseValidationResult.EventNotFound();
     }

@@ -13,13 +13,15 @@ public class GetAvailableTicketsHandlerTests
     private readonly Ticket _seatA2 = TestTickets.Create(KnownEventId, "A-2", TicketStatus.Sold);
     private readonly Ticket _seatA3 = TestTickets.Create(KnownEventId, "A-3");
 
+    private readonly FakeEventRepository _events = new(KnownEventId);
+    private readonly FakeAvailableSeatsCache _cache = new();
+    private readonly FakeSeatLockStore _seatLocks = new();
     private readonly GetAvailableTicketsHandler _handler;
 
     public GetAvailableTicketsHandlerTests()
     {
-        var events = new FakeEventRepository(KnownEventId);
         var tickets = new FakeTicketRepository(_seatA3, _seatA1, _seatA2);
-        _handler = new GetAvailableTicketsHandler(tickets, events);
+        _handler = new GetAvailableTicketsHandler(tickets, _events, _cache, _seatLocks);
     }
 
     [Fact]
@@ -46,11 +48,38 @@ public class GetAvailableTicketsHandlerTests
     {
         var eventId = Guid.NewGuid();
         var soldSeat = TestTickets.Create(eventId, "A-1", TicketStatus.Sold);
-        var handler = new GetAvailableTicketsHandler(new FakeTicketRepository(soldSeat), new FakeEventRepository(eventId));
+        var handler = new GetAvailableTicketsHandler(
+            new FakeTicketRepository(soldSeat),
+            new FakeEventRepository(eventId),
+            new FakeAvailableSeatsCache(),
+            new FakeSeatLockStore());
 
         var result = await handler.HandleAsync(new GetAvailableTicketsQuery(eventId));
 
         Assert.NotNull(result);
         Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task Second_query_is_served_from_the_cache()
+    {
+        await _handler.HandleAsync(new GetAvailableTicketsQuery(KnownEventId));
+        var databaseChecks = _events.ExistsCalls;
+
+        var result = await _handler.HandleAsync(new GetAvailableTicketsQuery(KnownEventId));
+
+        Assert.Equal(["A-1", "A-3"], result!.Select(t => t.SeatNumber));
+        Assert.Equal(databaseChecks, _events.ExistsCalls);
+        Assert.NotNull(await _cache.GetAsync(KnownEventId));
+    }
+
+    [Fact]
+    public async Task Reserved_seats_are_not_listed()
+    {
+        await _seatLocks.TryAcquireAsync(_seatA1.Id, Guid.NewGuid(), SeatReservationPolicy.LockDuration);
+
+        var result = await _handler.HandleAsync(new GetAvailableTicketsQuery(KnownEventId));
+
+        Assert.Equal(["A-3"], result!.Select(t => t.SeatNumber));
     }
 }

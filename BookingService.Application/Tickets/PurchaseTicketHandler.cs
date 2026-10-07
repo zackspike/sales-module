@@ -1,32 +1,52 @@
+using BookingService.Application.Caching;
 using BookingService.Application.Repositories;
 using BookingService.Domain;
 using BookingService.Domain.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace BookingService.Application.Tickets;
 
 /// <summary>
-/// Buys a specific seat (SP-05 / SP-06 / APP-04): validates name, email and event (400/404),
-/// then, in a single database transaction, checks the idempotency key, locks the ticket of the
-/// seat, registers the buyer and sells the seat. The "a seat is sold only once" rule lives in
-/// <see cref="Ticket.Purchase"/>.
+/// Buys a reserved seat (SP-05 / SP-06 / APP-04): validates name, email and event (400/404),
+/// answers duplicated requests from the idempotency store, requires the buyer to hold the seat
+/// lock taken by <see cref="ReserveSeatHandler"/> (403), and then, in a single database
+/// transaction, checks the idempotency key, locks the ticket row, and sells the seat.
+/// The "a seat is sold only once" rule lives in <see cref="Ticket.Purchase"/>.
 /// </summary>
 public sealed class PurchaseTicketHandler
 {
+    /// <summary>
+    /// How long a used idempotency key is answered from the idempotency store.
+    /// </summary>
+    public static readonly TimeSpan IdempotencyKeyRetention = TimeSpan.FromMinutes(10);
+
     private readonly TicketPurchaseValidator _validator;
     private readonly ITicketRepository _tickets;
     private readonly IUserRepository _users;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISeatLockStore _seatLocks;
+    private readonly IIdempotencyStore _idempotency;
+    private readonly IAvailableSeatsCache _availableSeats;
+    private readonly ILogger<PurchaseTicketHandler> _logger;
 
     public PurchaseTicketHandler(
         TicketPurchaseValidator validator,
         ITicketRepository tickets,
         IUserRepository users,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISeatLockStore seatLocks,
+        IIdempotencyStore idempotency,
+        IAvailableSeatsCache availableSeats,
+        ILogger<PurchaseTicketHandler> logger)
     {
         _validator = validator;
         _tickets = tickets;
         _users = users;
         _unitOfWork = unitOfWork;
+        _seatLocks = seatLocks;
+        _idempotency = idempotency;
+        _availableSeats = availableSeats;
+        _logger = logger;
     }
 
     public async Task<PurchaseTicketResult> HandleAsync(
@@ -56,17 +76,71 @@ public sealed class PurchaseTicketHandler
         var fullName = command.FullName!.Trim();
         var email = command.Email!.Trim();
 
+        var remembered = await _idempotency.GetAsync(command.IdempotencyKey, cancellationToken);
+        if (remembered is not null)
+        {
+            return await ReplayRememberedPurchaseAsync(remembered, command, cancellationToken);
+        }
+
+        var ticket = await _tickets.GetByIdAsync(command.EventId, command.TicketId, cancellationToken);
+        if (ticket is null)
+        {
+            return PurchaseTicketResult.Failed(PurchaseTicketStatus.TicketNotFound);
+        }
+
+        if (ticket.Status == TicketStatus.Sold)
+        {
+            // Covers retries whose idempotency entry expired: the database still knows the key.
+            return ticket.IdempotencyKey == command.IdempotencyKey
+                ? PurchaseTicketResult.Replayed(ticket)
+                : PurchaseTicketResult.Failed(PurchaseTicketStatus.AlreadySold);
+        }
+
+        var buyer = await _users.GetByEmailAsync(email, cancellationToken);
+        var lockHolder = await _seatLocks.GetHolderAsync(command.TicketId, cancellationToken);
+        if (buyer is null || lockHolder != buyer.Id)
+        {
+            // The key may already have bought another seat (expired idempotency entry).
+            var previousPurchase = await _tickets.GetByIdempotencyKeyAsync(command.IdempotencyKey, cancellationToken);
+            return previousPurchase is null
+                ? PurchaseTicketResult.Failed(PurchaseTicketStatus.ReservationRequired)
+                : ReplayOrConflict(previousPurchase, command);
+        }
+
+        PurchaseTicketResult result;
         try
         {
-            return await PurchaseInTransactionAsync(command, fullName, email, cancellationToken);
+            result = await PurchaseInTransactionAsync(command, fullName, email, cancellationToken);
         }
         catch (UniqueConstraintViolationException)
         {
-            // A concurrent request committed the same idempotency key or registered the same
-            // email first. Its data is visible now, so a second attempt resolves to a replay,
-            // a conflict or a purchase with the existing user.
-            return await PurchaseInTransactionAsync(command, fullName, email, cancellationToken);
+            // A concurrent request committed the same idempotency key first. Its data is
+            // visible now, so a second attempt resolves to a replay or a conflict.
+            result = await PurchaseInTransactionAsync(command, fullName, email, cancellationToken);
         }
+
+        if (result.Status == PurchaseTicketStatus.Purchased)
+        {
+            await AfterPurchaseCommittedAsync(result.Ticket!, command, cancellationToken);
+        }
+
+        return result;
+    }
+
+    private async Task<PurchaseTicketResult> ReplayRememberedPurchaseAsync(
+        IdempotencyRecord remembered,
+        PurchaseTicketCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (remembered.TicketId != command.TicketId || remembered.EventId != command.EventId)
+        {
+            return PurchaseTicketResult.Failed(PurchaseTicketStatus.IdempotencyKeyConflict);
+        }
+
+        var ticket = await _tickets.GetByIdAsync(command.EventId, command.TicketId, cancellationToken);
+        return ticket is null
+            ? PurchaseTicketResult.Failed(PurchaseTicketStatus.TicketNotFound)
+            : PurchaseTicketResult.Replayed(ticket);
     }
 
     private async Task<PurchaseTicketResult> PurchaseInTransactionAsync(
@@ -129,6 +203,34 @@ public sealed class PurchaseTicketHandler
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return PurchaseTicketResult.Purchased(ticket);
+    }
+
+    /// <summary>
+    /// Updates the hot-path stores once the sale is durable. Failures are only logged: the sale is
+    /// already committed, the lock and cache expire on their own, and replays fall back to the database.
+    /// </summary>
+    private async Task AfterPurchaseCommittedAsync(
+        Ticket ticket,
+        PurchaseTicketCommand command,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _idempotency.RememberAsync(
+                command.IdempotencyKey,
+                new IdempotencyRecord(command.EventId, ticket.Id),
+                IdempotencyKeyRetention,
+                cancellationToken);
+            await _seatLocks.ReleaseAsync(ticket.Id, ticket.UserId!.Value, cancellationToken);
+            await _availableSeats.InvalidateAsync(command.EventId, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Ticket {TicketId} was sold but the seat lock/idempotency/cache stores could not be updated.",
+                ticket.Id);
+        }
     }
 
     private static PurchaseTicketResult ReplayOrConflict(Ticket previousPurchase, PurchaseTicketCommand command)

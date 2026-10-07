@@ -1,20 +1,31 @@
+using BookingService.Application.Caching;
 using BookingService.Application.Repositories;
 using BookingService.Application.Tickets.Dtos;
+using BookingService.Domain;
 
 namespace BookingService.Application.Tickets.Queries;
 
 /// <summary>
 /// Handles checking the availability of a specific seat (SP-04 / APP-02).
+/// The status is <c>Sold</c> or <c>Available</c> as stored in the database, or
+/// <see cref="ReservedStatus"/> when an available seat is locked by a fan.
 /// </summary>
 public sealed class CheckTicketAvailabilityHandler
 {
+    public const string ReservedStatus = "Reserved";
+
     private readonly ITicketRepository _tickets;
     private readonly IEventRepository _events;
+    private readonly ISeatLockStore _seatLocks;
 
-    public CheckTicketAvailabilityHandler(ITicketRepository tickets, IEventRepository events)
+    public CheckTicketAvailabilityHandler(
+        ITicketRepository tickets,
+        IEventRepository events,
+        ISeatLockStore seatLocks)
     {
         _tickets = tickets;
         _events = events;
+        _seatLocks = seatLocks;
     }
 
     /// <summary>
@@ -35,9 +46,11 @@ public sealed class CheckTicketAvailabilityHandler
             return null;
         }
 
-        return new SeatAvailabilityDto(
-            ticket.Id,
-            ticket.Seat!.SeatNumber,
-            ticket.Status.ToString());
+        var status = ticket.Status == TicketStatus.Available
+            && await _seatLocks.GetHolderAsync(ticket.Id, cancellationToken) is not null
+                ? ReservedStatus
+                : ticket.Status.ToString();
+
+        return new SeatAvailabilityDto(ticket.Id, ticket.Seat!.SeatNumber, status);
     }
 }

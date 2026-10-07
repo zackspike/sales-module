@@ -22,7 +22,16 @@ Accept: application/json
 GET {{BookingService.Api_HostAddress}}/events/{{eventId}}/tickets/{{ticketId}}/availability
 Accept: application/json
 
-### 6. Seat purchase (SP-05 / SP-06) - repeating it with the same key returns 200 with the same ticket
+### 6. Seat reservation - locks the seat for this buyer during 10 minutes (a different email gets 409)
+POST {{BookingService.Api_HostAddress}}/events/{{eventId}}/tickets/{{ticketId}}/reserve
+Content-Type: application/json
+
+{
+  "fullName": "Jane Doe",
+  "email": "jane.doe@example.com"
+}
+
+### 7. Seat purchase (SP-05 / SP-06) - needs request 6 first (otherwise 403); repeating it with the same key returns 200
 POST {{BookingService.Api_HostAddress}}/events/{{eventId}}/tickets/{{ticketId}}/purchase
 Content-Type: application/json
 X-Idempotency-Key: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee

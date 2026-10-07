@@ -29,7 +29,9 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddInfrastructure();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<TicketPurchaseValidator>();
+builder.Services.AddScoped<ReserveSeatHandler>();
 builder.Services.AddScoped<PurchaseTicketHandler>();
 builder.Services.AddScoped<GetAvailableTicketsHandler>();
 builder.Services.AddScoped<CheckTicketAvailabilityHandler>();

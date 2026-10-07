@@ -12,13 +12,14 @@ public class CheckTicketAvailabilityHandlerTests
     private readonly Ticket _availableSeat = TestTickets.Create(KnownEventId, "A-1");
     private readonly Ticket _soldSeat = TestTickets.Create(KnownEventId, "A-2", TicketStatus.Sold);
 
+    private readonly FakeSeatLockStore _seatLocks = new();
     private readonly CheckTicketAvailabilityHandler _handler;
 
     public CheckTicketAvailabilityHandlerTests()
     {
         var events = new FakeEventRepository(KnownEventId);
         var tickets = new FakeTicketRepository(_availableSeat, _soldSeat);
-        _handler = new CheckTicketAvailabilityHandler(tickets, events);
+        _handler = new CheckTicketAvailabilityHandler(tickets, events, _seatLocks);
     }
 
     [Fact]
@@ -41,6 +42,17 @@ public class CheckTicketAvailabilityHandlerTests
         Assert.Equal(_soldSeat.Id, result.TicketId);
         Assert.Equal("A-2", result.SeatNumber);
         Assert.Equal("Sold", result.Status);
+    }
+
+    [Fact]
+    public async Task Returns_reserved_for_available_seat_locked_by_a_buyer()
+    {
+        await _seatLocks.TryAcquireAsync(_availableSeat.Id, Guid.NewGuid(), SeatReservationPolicy.LockDuration);
+
+        var result = await _handler.HandleAsync(new CheckTicketAvailabilityQuery(KnownEventId, _availableSeat.Id));
+
+        Assert.NotNull(result);
+        Assert.Equal("Reserved", result.Status);
     }
 
     [Fact]

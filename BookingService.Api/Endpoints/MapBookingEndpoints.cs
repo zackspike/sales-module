@@ -70,7 +70,43 @@ public static class BookingEndpoints
                     new { error = "The requested seat has already been purchased." }),
                 PurchaseTicketStatus.IdempotencyKeyConflict => Results.Conflict(
                     new { error = "X-Idempotency-Key was already used to purchase a different seat." }),
+                PurchaseTicketStatus.ReservationRequired => Results.Json(
+                    new { error = "The seat must be reserved by this buyer before purchasing it, or the reservation expired." },
+                    statusCode: StatusCodes.Status403Forbidden),
                 _ => throw new InvalidOperationException($"Unexpected purchase status '{result.Status}'.")
+            };
+        });
+
+        // Seat lock: POST /events/{eventId}/tickets/{ticketId}/reserve
+        app.MapPost("/events/{eventId:guid}/tickets/{ticketId:guid}/reserve", async (
+            Guid eventId,
+            Guid ticketId,
+            ReserveSeatRequest request,
+            ReserveSeatHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var command = new ReserveSeatCommand(eventId, ticketId, request.FullName, request.Email);
+
+            var result = await handler.HandleAsync(command, cancellationToken);
+
+            return result.Status switch
+            {
+                ReserveSeatStatus.Reserved => Results.Ok(new SeatReservationDto(
+                    result.Ticket!.Id,
+                    eventId,
+                    result.Ticket.Seat!.SeatNumber,
+                    result.BuyerId!.Value,
+                    result.ExpiresAtUtc!.Value)),
+                ReserveSeatStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
+                ReserveSeatStatus.EventNotFound => Results.NotFound(
+                    new { error = $"Event with id '{eventId}' not found." }),
+                ReserveSeatStatus.TicketNotFound => Results.NotFound(
+                    new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." }),
+                ReserveSeatStatus.AlreadySold => Results.Conflict(
+                    new { error = "The requested seat has already been purchased." }),
+                ReserveSeatStatus.LockedByAnotherUser => Results.Conflict(
+                    new { error = "The requested seat is reserved by another buyer." }),
+                _ => throw new InvalidOperationException($"Unexpected reservation status '{result.Status}'.")
             };
         });
     }

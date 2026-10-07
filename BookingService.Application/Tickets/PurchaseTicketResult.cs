@@ -23,7 +23,10 @@ public enum PurchaseTicketStatus
     AlreadySold,
 
     /// <summary>The idempotency key was already used to buy a different seat (HTTP 409).</summary>
-    IdempotencyKeyConflict
+    IdempotencyKeyConflict,
+
+    /// <summary>The buyer does not hold a current reservation (seat lock) of the seat (HTTP 403).</summary>
+    ReservationRequired
 }
 
 /// <summary>
