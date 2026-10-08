@@ -12,6 +12,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<TicketPurchaseValidator>();
+        services.AddScoped<ReserveSeatHandler>();
         services.AddScoped<PurchaseTicketHandler>();
         services.AddScoped<GetAvailableTicketsHandler>();
         services.AddScoped<CheckTicketAvailabilityHandler>();
