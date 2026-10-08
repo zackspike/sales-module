@@ -6,7 +6,8 @@ Backend service responsible for ticket purchasing, idempotency handling, and uni
 ---
 
 ## Requirements
-* [.NET 8.0+ SDK](https://dotnet.microsoft.com/download) (Compatible with .NET 8, 9 and 10)
+* [.NET 10 SDK](https://dotnet.microsoft.com/download)
+* [Docker](https://docs.docker.com/get-docker/) with Docker Compose (PostgreSQL for local development)
 
 ---
 
@@ -21,7 +22,9 @@ booking-service/
 ├── BookingService.Api/            # Minimal APIs, endpoints, middleware, HTTP models
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
 ├── BookingService.Domain/         # Core business entities (Ticket, Event), value objects, domain rules
-├── BookingService.Infrastructure/ # EF Core + PostgreSQL persistence, in-memory fallback (ConcurrentDictionary)
+├── BookingService.Infrastructure/ # EF Core + PostgreSQL persistence, migrations (incl. seed data), in-memory fallback
+├── BookingService.Application.Tests/ # xUnit unit tests (+ PostgreSQL integration tests when a DB is configured)
+├── docker-compose.yml             # Local PostgreSQL dependency
 ├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
 ├── .agents/                       # Agent workflows, specifications (Notion), and MCP integrations
 ├── AGENTS.md                      # Global architecture rules & agent workflow protocol
@@ -47,15 +50,24 @@ booking-service/
    docker compose up -d   # PostgreSQL on localhost:5433 (used by appsettings.Development.json)
    dotnet run --project BookingService.Api
    ```
-   In Development the API applies pending EF Core migrations and seeds the default event on startup.
+   In Development the API applies pending EF Core migrations on startup. The `SeedDefaultEvent` migration
+   seeds a dummy event (`11111111-1111-1111-1111-111111111111`, "Rock Fest 2026") with 50 available seats (`A-1`..`A-50`).
+   To apply migrations manually instead: `dotnet tool restore && dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api`.
    Without `ConnectionStrings:DefaultConnection` it falls back to the in-memory store (data is lost on restart).
 
-3. **Explore the API:**
+4. **Explore the API:**
    * Swagger UI will be available at: `http://localhost:<port>/swagger` (in Development mode).
    * Health check endpoint: `GET /health` (returns `{ "status": "ok" }`).
    * Root status endpoint: `GET /`.
 
-4. **Code Quality & Formatting:**
+5. **Run the tests:**
+   ```bash
+   dotnet test
+   ```
+   PostgreSQL integration tests are skipped unless `ConnectionStrings__DefaultConnection` is set
+   (e.g. `Host=localhost;Port=5433;Database=bookingservice_db;Username=postgres;Password=postgres`).
+
+6. **Lint (code quality & formatting):**
    * Verify formatting (lint check):
      ```bash
      dotnet format --verify-no-changes
@@ -65,7 +77,7 @@ booking-service/
      dotnet format
      ```
 
-5. **Generate OpenAPI Specification (Contract):**
+7. **Generate OpenAPI Specification (Contract):**
    * Restore local tools:
      ```bash
      dotnet tool restore

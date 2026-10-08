@@ -64,12 +64,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 
     using var scope = app.Services.CreateScope();
-    var dbContext = scope.ServiceProvider.GetService<BookingDbContext>();
-    if (dbContext is not null)
-    {
-        dbContext.Database.Migrate();
-        BookingDbSeeder.Seed(dbContext);
-    }
+    scope.ServiceProvider.GetService<BookingDbContext>()?.Database.Migrate();
 }
 
 app.UseCors();
