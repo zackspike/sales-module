@@ -7,7 +7,7 @@ Backend service responsible for ticket purchasing, idempotency handling, and uni
 
 ## Requirements
 * [.NET 10 SDK](https://dotnet.microsoft.com/download)
-* [Docker](https://docs.docker.com/get-docker/) with Docker Compose (PostgreSQL for local development)
+* [Docker](https://docs.docker.com/get-docker/) with Docker Compose (PostgreSQL and Redis for local development)
 
 ---
 
@@ -22,9 +22,9 @@ booking-service/
 ├── BookingService.Api/            # Minimal APIs, endpoints, middleware, HTTP models
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
 ├── BookingService.Domain/         # Core business entities (Ticket, Event), value objects, domain rules
-├── BookingService.Infrastructure/ # EF Core + PostgreSQL persistence, migrations (incl. seed data), in-memory fallback
-├── BookingService.Application.Tests/ # xUnit unit tests (+ PostgreSQL integration tests when a DB is configured)
-├── docker-compose.yml             # Local PostgreSQL dependency
+├── BookingService.Infrastructure/ # EF Core + PostgreSQL persistence, migrations (incl. seed data), Redis seat locks/cache, in-memory fallback
+├── BookingService.Application.Tests/ # xUnit unit tests (+ PostgreSQL/Redis integration tests when configured)
+├── docker-compose.yml             # Local PostgreSQL and Redis dependencies
 ├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
 ├── .agents/                       # Agent workflows, specifications (Notion), and MCP integrations
 ├── AGENTS.md                      # Global architecture rules & agent workflow protocol
@@ -47,13 +47,22 @@ booking-service/
 
 3. **Run the API:**
    ```bash
-   docker compose up -d   # PostgreSQL on localhost:5433 (used by appsettings.Development.json)
+   docker compose up -d   # PostgreSQL on localhost:5433, Redis on localhost:6381 (used by appsettings.Development.json)
    dotnet run --project BookingService.Api
    ```
    In Development the API applies pending EF Core migrations on startup. The `SeedDefaultEvent` migration
    seeds a dummy event (`11111111-1111-1111-1111-111111111111`, "Rock Fest 2026") with 50 available seats (`A-1`..`A-50`).
    To apply migrations manually instead: `dotnet tool restore && dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api`.
    Without `ConnectionStrings:DefaultConnection` it falls back to the in-memory store (data is lost on restart).
+   Without `ConnectionStrings:Redis` seat reservations are kept in memory (not shared between instances) and nothing is cached.
+
+   **Purchase flow:** a seat must be reserved before it is bought.
+   * `POST /events/{eventId}/tickets/{ticketId}/reserve` locks the seat for the buyer's email for 10 minutes
+     (Redis key `booking:seat-lock:{ticketId}`, atomic Lua scripts). The same email renews it; another email gets 409.
+   * `POST /events/{eventId}/tickets/{ticketId}/purchase` (with `X-Idempotency-Key`) requires that reservation (403 otherwise).
+     Used keys are answered from Redis for 10 minutes before touching the database; after the sale the lock is released.
+   * `GET /events/{eventId}/tickets` is cached in Redis for 30 s (invalidated on each sale) and hides reserved seats;
+     `GET .../availability` reports `Reserved` for a locked seat.
 
 4. **Explore the API:**
    * Swagger UI will be available at: `http://localhost:<port>/swagger` (in Development mode).
@@ -65,7 +74,8 @@ booking-service/
    dotnet test
    ```
    PostgreSQL integration tests are skipped unless `ConnectionStrings__DefaultConnection` is set
-   (e.g. `Host=localhost;Port=5433;Database=bookingservice_db;Username=postgres;Password=postgres`).
+   (e.g. `Host=localhost;Port=5433;Database=bookingservice_db;Username=postgres;Password=postgres`),
+   and Redis integration tests unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
 
 6. **Lint (code quality & formatting):**
    * Verify formatting (lint check):
