@@ -50,6 +50,14 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(t => new { t.EventId, t.SeatNumber })
             .IsUnique();
 
-        builder.HasIndex(t => t.IdempotencyKey);
+        builder.HasIndex(t => t.IdempotencyKey)
+            .IsUnique()
+            .HasFilter("\"IdempotencyKey\" != '00000000-0000-0000-0000-000000000000'");
+
+        builder.Property<uint>("xmin")
+            .HasColumnName("xmin")
+            .HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate()
+            .IsConcurrencyToken();
     }
 }
