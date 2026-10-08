@@ -44,8 +44,11 @@ booking-service/
 
 3. **Run the API:**
    ```bash
+   docker compose up -d   # PostgreSQL on localhost:5433 (used by appsettings.Development.json)
    dotnet run --project BookingService.Api
    ```
+   In Development the API applies pending EF Core migrations and seeds the default event on startup.
+   Without `ConnectionStrings:DefaultConnection` it falls back to the in-memory store (data is lost on restart).
 
 3. **Explore the API:**
    * Swagger UI will be available at: `http://localhost:<port>/swagger` (in Development mode).

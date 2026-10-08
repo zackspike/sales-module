@@ -41,7 +41,8 @@ public partial class InitialCreate : Migration
                 TicketCode = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                 IdempotencyKey = table.Column<Guid>(type: "uuid", nullable: false),
                 CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                PurchasedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                PurchasedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false)
             },
             constraints: table =>
             {
@@ -63,7 +64,9 @@ public partial class InitialCreate : Migration
         migrationBuilder.CreateIndex(
             name: "IX_tickets_IdempotencyKey",
             table: "tickets",
-            column: "IdempotencyKey");
+            column: "IdempotencyKey",
+            unique: true,
+            filter: "\"IdempotencyKey\" != '00000000-0000-0000-0000-000000000000'");
     }
 
     /// <inheritdoc />

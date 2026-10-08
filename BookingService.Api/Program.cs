@@ -4,6 +4,7 @@ using BookingService.Api.Middleware;
 using BookingService.Application;
 using BookingService.Infrastructure;
 using BookingService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -49,6 +50,12 @@ builder.Services
 
 var app = builder.Build();
 
+// ponytail: warning, not a hard fail: `dotnet swagger tofile` boots this host without a connection string.
+if (string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("DefaultConnection")))
+{
+    app.Logger.LogWarning("ConnectionStrings:DefaultConnection is not set; using the in-memory store. Sales will be lost on restart.");
+}
+
 app.UseGlobalExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -60,6 +67,7 @@ if (app.Environment.IsDevelopment())
     var dbContext = scope.ServiceProvider.GetService<BookingDbContext>();
     if (dbContext is not null)
     {
+        dbContext.Database.Migrate();
         BookingDbSeeder.Seed(dbContext);
     }
 }

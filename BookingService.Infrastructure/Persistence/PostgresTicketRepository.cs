@@ -1,4 +1,3 @@
-using System.Data;
 using BookingService.Application.Abstractions;
 using BookingService.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
@@ -65,8 +64,6 @@ public class PostgresTicketRepository : ITicketRepository
 
     public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase)
     {
-        using var transaction = _dbContext.Database.BeginTransaction(IsolationLevel.RepeatableRead);
-
         if (idempotencyKey != Guid.Empty)
         {
             var existingTicket = _dbContext.Tickets
@@ -87,16 +84,31 @@ public class PostgresTicketRepository : ITicketRepository
             return new TicketPurchaseOutcome(null, Replayed: false);
         }
 
+        purchase(ticket);
         try
         {
-            purchase(ticket);
+            // xmin token: 0 rows updated if another buyer sold the seat first.
+            // Unique index on IdempotencyKey: the same key won a race on another seat.
             _dbContext.SaveChanges();
-            transaction.Commit();
         }
-        catch (DbUpdateConcurrencyException)
+        catch (DbUpdateException ex)
         {
-            // Another transaction committed first — the seat was purchased concurrently.
-            throw new TicketAlreadySoldException(ticket.Id);
+            _dbContext.ChangeTracker.Clear();
+            var winner = _dbContext.Tickets
+                .AsNoTracking()
+                .FirstOrDefault(t => t.IdempotencyKey == idempotencyKey);
+
+            if (winner is not null)
+            {
+                return new TicketPurchaseOutcome(winner, Replayed: true);
+            }
+
+            if (ex is DbUpdateConcurrencyException)
+            {
+                throw new TicketAlreadySoldException(ticket.Id);
+            }
+
+            throw;
         }
 
         return new TicketPurchaseOutcome(ticket, Replayed: false);

@@ -63,12 +63,12 @@ jobs:
           dotnet restore
           dotnet tool restore
 
-      - name: "apply database migrations and seed data"
+      - name: "apply database migrations"
         env:
           ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
-        run: |
-          dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api
-          PGPASSWORD=postgres psql -h localhost -U postgres -d bookingservice_db -f scripts/seed.sql
+        run: dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api
 
       - name: "run tests"
+        env:
+          ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
         run: dotnet test --no-restore --verbosity normal
