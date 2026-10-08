@@ -63,12 +63,15 @@ jobs:
           dotnet restore
           dotnet tool restore
 
+      - name: "build"
+        run: dotnet build --no-restore
+
       - name: "apply database migrations"
         env:
           ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
-        run: dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api
+        run: dotnet ef database update --no-build --project BookingService.Infrastructure --startup-project BookingService.Api
 
       - name: "run tests"
         env:
           ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
-        run: dotnet test --no-restore --verbosity normal
+        run: dotnet test --no-build --verbosity normal
