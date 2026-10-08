@@ -43,6 +43,11 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: "checkout code"
@@ -59,19 +64,11 @@ jobs:
           dotnet tool restore
 
       - name: "apply database migrations and seed data"
+        env:
+          ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
         run: |
-          if command -v pg_isready >/dev/null 2>&1 && pg_isready -h postgres -p 5432 >/dev/null 2>&1; then
-            DB_HOST="postgres"
-          else
-            DB_HOST="localhost"
-          fi
-          export ConnectionStrings__DefaultConnection="Host=${DB_HOST};Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
           dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api
-          if command -v psql >/dev/null 2>&1; then
-            PGPASSWORD=postgres psql -h "${DB_HOST}" -U postgres -d bookingservice_db -f scripts/seed.sql || true
-          elif command -v docker >/dev/null 2>&1; then
-            docker exec $(docker ps -q -f ancestor=postgres:17-alpine | head -n 1) psql -U postgres -d bookingservice_db -f scripts/seed.sql || true
-          fi
+          PGPASSWORD=postgres psql -h localhost -U postgres -d bookingservice_db -f scripts/seed.sql
 
       - name: "run tests"
         run: dotnet test --no-restore --verbosity normal
