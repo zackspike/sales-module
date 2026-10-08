@@ -1,0 +1,11 @@
+<Project>
+  <!-- Auto-configure Git hooks on local developer builds (runs once on BookingService.Api to prevent parallel write locks) -->
+  <Target Name="ConfigureGitHooks"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(CI)' != 'true' and '$(MSBuildProjectName)' == 'BookingService.Api'">
+    <Exec Command="git config core.hooksPath .githooks"
+          IgnoreExitCode="true"
+          StandardOutputImportance="Low"
+          StandardErrorImportance="Low" />
+  </Target>
+</Project>
