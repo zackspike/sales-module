@@ -56,6 +56,11 @@ if (string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("DefaultConn
     app.Logger.LogWarning("ConnectionStrings:DefaultConnection is not set; using the in-memory store. Sales will be lost on restart.");
 }
 
+if (string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("Redis")))
+{
+    app.Logger.LogWarning("ConnectionStrings:Redis is not set; seat reservations are kept in memory and are not shared between instances.");
+}
+
 app.UseGlobalExceptionHandler();
 
 if (app.Environment.IsDevelopment())

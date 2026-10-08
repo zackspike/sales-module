@@ -1,7 +1,9 @@
 using BookingService.Application.Tickets.Commands;
 using BookingService.Domain.Events;
+using BookingService.Infrastructure.Caching;
 using BookingService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BookingService.Application.Tests.Infrastructure;
 
@@ -68,16 +70,26 @@ public class PostgresTicketRepositoryTests
         Assert.Single(results, s => s == PurchaseTicketStatus.IdempotencyKeyConflict);
     }
 
+    // Every buyer uses the same email, so all of them hold the seat lock and the database decides.
     private static PurchaseTicketStatus[] Race(int buyers, Func<int, PurchaseTicketCommand> command)
     {
         var results = new PurchaseTicketStatus[buyers];
+        var locks = new InMemorySeatLockStore();
+        for (var i = 0; i < buyers; i++)
+        {
+            locks.TryAcquire(command(i).TicketId, "juan.perez@example.com", TimeSpan.FromMinutes(10));
+        }
 
         Parallel.For(0, buyers, new ParallelOptions { MaxDegreeOfParallelism = buyers }, index =>
         {
             using var db = new BookingDbContext(Options.Value);
             var handler = new PurchaseTicketHandler(
                 new TicketPurchaseValidator(new PostgresEventCatalog(db)),
-                new PostgresTicketRepository(db));
+                new PostgresTicketRepository(db),
+                locks,
+                new NoCache(),
+                new NoCache(),
+                NullLogger<PurchaseTicketHandler>.Instance);
             results[index] = handler.Handle(command(index)).Status;
         });
 

@@ -6,7 +6,7 @@ namespace BookingService.Application.Tickets.Dtos;
 /// </summary>
 /// <param name="TicketId">Unique identifier of the ticket (seat).</param>
 /// <param name="SeatNumber">Designated seat label within the event venue (e.g., 'A-1').</param>
-/// <param name="Status">Current availability status of the seat ('Available' or 'Sold').</param>
+/// <param name="Status">Current availability status of the seat ('Available', 'Reserved' or 'Sold').</param>
 public sealed record SeatAvailabilityDto(
     Guid TicketId,
     string SeatNumber,

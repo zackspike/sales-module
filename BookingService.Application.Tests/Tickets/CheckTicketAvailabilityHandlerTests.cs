@@ -1,6 +1,7 @@
 using BookingService.Application.Abstractions;
 using BookingService.Application.Tickets.Queries;
 using BookingService.Domain.Tickets;
+using BookingService.Infrastructure.Caching;
 
 namespace BookingService.Application.Tests.Tickets;
 
@@ -12,13 +13,14 @@ public class CheckTicketAvailabilityHandlerTests
     private readonly Ticket _availableSeat = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-1", Status = TicketStatus.Available };
     private readonly Ticket _soldSeat = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-2", Status = TicketStatus.Sold };
 
+    private readonly InMemorySeatLockStore _locks = new();
     private readonly CheckTicketAvailabilityHandler _handler;
 
     public CheckTicketAvailabilityHandlerTests()
     {
         var catalog = new FakeEventCatalog(KnownEventId);
         var repo = new FakeTicketRepository(_availableSeat, _soldSeat);
-        _handler = new CheckTicketAvailabilityHandler(repo, catalog);
+        _handler = new CheckTicketAvailabilityHandler(repo, catalog, _locks);
     }
 
     [Fact]
@@ -41,6 +43,16 @@ public class CheckTicketAvailabilityHandlerTests
         Assert.Equal(_soldSeat.Id, result.TicketId);
         Assert.Equal("A-2", result.SeatNumber);
         Assert.Equal("Sold", result.Status);
+    }
+
+    [Fact]
+    public void Reports_reserved_for_locked_available_seat()
+    {
+        _locks.TryAcquire(_availableSeat.Id, "juan.perez@example.com", TimeSpan.FromMinutes(10));
+
+        var result = _handler.Handle(new CheckTicketAvailabilityQuery(KnownEventId, _availableSeat.Id));
+
+        Assert.Equal(CheckTicketAvailabilityHandler.ReservedStatus, result!.Status);
     }
 
     [Fact]
