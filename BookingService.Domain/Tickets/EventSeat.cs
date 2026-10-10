@@ -1,6 +1,6 @@
 using BookingService.Domain.Exceptions;
 
-namespace BookingService.Domain;
+namespace BookingService.Domain.Tickets;
 
 public class EventSeat
 {

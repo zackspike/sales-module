@@ -1,4 +1,4 @@
-namespace BookingService.Domain;
+namespace BookingService.Domain.Tickets;
 
 /// <summary>
 /// Represents the status of a seat in the booking system. Sold means there 
