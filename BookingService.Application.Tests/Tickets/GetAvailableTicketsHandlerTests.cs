@@ -1,7 +1,8 @@
-using BookingService.Application.Repositories;
-using BookingService.Application.Tickets;
+using BookingService.Application.Abstractions;
+using BookingService.Application.Tickets.Dtos;
 using BookingService.Application.Tickets.Queries;
-using BookingService.Domain;
+using BookingService.Domain.Tickets;
+using BookingService.Infrastructure.Caching;
 
 namespace BookingService.Application.Tests.Tickets;
 
@@ -14,13 +15,15 @@ public class GetAvailableTicketsHandlerTests
     private readonly Ticket _seatA2 = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-2", Status = TicketStatus.Sold };
     private readonly Ticket _seatA3 = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-3", Status = TicketStatus.Available };
 
+    private readonly InMemorySeatLockStore _locks = new();
+    private readonly FakeAvailableSeatsCache _cache = new();
     private readonly GetAvailableTicketsHandler _handler;
 
     public GetAvailableTicketsHandlerTests()
     {
         var catalog = new FakeEventCatalog(KnownEventId);
         var repo = new FakeTicketRepository(_seatA1, _seatA2, _seatA3);
-        _handler = new GetAvailableTicketsHandler(repo, catalog);
+        _handler = new GetAvailableTicketsHandler(repo, catalog, _cache, _locks);
     }
 
     [Fact]
@@ -48,12 +51,42 @@ public class GetAvailableTicketsHandlerTests
         var eventId = Guid.NewGuid();
         var catalog = new FakeEventCatalog(eventId);
         var soldSeat = new Ticket { Id = Guid.NewGuid(), EventId = eventId, SeatNumber = "A-1", Status = TicketStatus.Sold };
-        var handler = new GetAvailableTicketsHandler(new FakeTicketRepository(soldSeat), catalog);
+        var handler = new GetAvailableTicketsHandler(new FakeTicketRepository(soldSeat), catalog, new NoCache(), _locks);
 
         var result = handler.Handle(new GetAvailableTicketsQuery(eventId));
 
         Assert.NotNull(result);
         Assert.Empty(result);
+    }
+
+    [Fact]
+    public void Reserved_seats_are_left_out()
+    {
+        _locks.TryAcquire(_seatA1.Id, "juan.perez@example.com", TimeSpan.FromMinutes(10));
+
+        var result = _handler.Handle(new GetAvailableTicketsQuery(KnownEventId));
+
+        Assert.Equal(["A-3"], result!.Select(t => t.SeatNumber));
+    }
+
+    [Fact]
+    public void Cached_seats_are_served_without_the_repository()
+    {
+        _handler.Handle(new GetAvailableTicketsQuery(KnownEventId));
+        _seatA1.Status = TicketStatus.Sold;
+
+        var result = _handler.Handle(new GetAvailableTicketsQuery(KnownEventId));
+
+        Assert.Equal(["A-1", "A-3"], result!.Select(t => t.SeatNumber));
+    }
+
+    private sealed class FakeAvailableSeatsCache : IAvailableSeatsCache
+    {
+        private readonly Dictionary<Guid, IReadOnlyList<SeatAvailabilityDto>> _seats = new();
+
+        public IReadOnlyList<SeatAvailabilityDto>? Get(Guid eventId) => _seats.GetValueOrDefault(eventId);
+        public void Set(Guid eventId, IReadOnlyList<SeatAvailabilityDto> seats) => _seats[eventId] = seats;
+        public void Invalidate(Guid eventId) => _seats.Remove(eventId);
     }
 
     private sealed class FakeEventCatalog(params Guid[] knownEvents) : IEventCatalog
@@ -68,14 +101,8 @@ public class GetAvailableTicketsHandlerTests
 
         public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId) =>
             _tickets.Where(t => t.EventId == eventId).ToList();
-
-        public Ticket GetOrAdd(Guid idempotencyKey, Ticket ticket, out bool wasCreated) => throw new NotSupportedException();
         public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
         public Ticket? GetById(Guid eventId, Guid ticketId) => throw new NotSupportedException();
-        public Ticket? GetById(Guid id) => throw new NotSupportedException();
-        public IReadOnlyCollection<Ticket> GetAll() => throw new NotSupportedException();
-        public Ticket Update(Ticket ticket) => throw new NotSupportedException();
-        public bool Remove(Guid id) => throw new NotSupportedException();
         public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase) => throw new NotSupportedException();
     }
 }

@@ -1,6 +1,8 @@
-using BookingService.Application.Repositories;
-using BookingService.Application.Tickets;
-using BookingService.Domain;
+using BookingService.Application.Abstractions;
+using BookingService.Application.Tickets.Commands;
+using BookingService.Domain.Tickets;
+using BookingService.Infrastructure.Caching;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BookingService.Application.Tests.Tickets;
 
@@ -11,12 +13,15 @@ public class PurchaseTicketHandlerTests
 
     private readonly Ticket _seatA1 = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-1" };
     private readonly Ticket _seatA2 = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-2" };
+    private readonly InMemorySeatLockStore _locks = new();
+    private readonly FakeIdempotencyStore _idempotency = new();
     private readonly PurchaseTicketHandler _handler;
 
     public PurchaseTicketHandlerTests()
     {
-        var validator = new TicketPurchaseValidator(new FakeEventCatalog(KnownEventId));
-        _handler = new PurchaseTicketHandler(validator, new FakeTicketRepository(_seatA1, _seatA2));
+        _handler = Handler(new FakeEventCatalog(KnownEventId), _seatA1, _seatA2);
+        Reserve(_seatA1.Id);
+        Reserve(_seatA2.Id);
     }
 
     [Fact]
@@ -80,8 +85,7 @@ public class PurchaseTicketHandlerTests
     public void Seat_of_another_event_is_not_found()
     {
         var otherEventId = Guid.NewGuid();
-        var validator = new TicketPurchaseValidator(new FakeEventCatalog(KnownEventId, otherEventId));
-        var handler = new PurchaseTicketHandler(validator, new FakeTicketRepository(_seatA1));
+        var handler = Handler(new FakeEventCatalog(KnownEventId, otherEventId), _seatA1);
 
         var result = handler.Handle(Command(_seatA1.Id, Guid.NewGuid()) with { EventId = otherEventId });
 
@@ -140,8 +144,81 @@ public class PurchaseTicketHandlerTests
         Assert.Equal(9, results.Count(r => r.Status == PurchaseTicketStatus.AlreadySold));
     }
 
+    [Fact]
+    public void Seat_without_reservation_requires_one()
+    {
+        _locks.Release(_seatA1.Id, "juan.perez@example.com");
+
+        var result = _handler.Handle(Command(_seatA1.Id, Guid.NewGuid()));
+
+        Assert.Equal(PurchaseTicketStatus.ReservationRequired, result.Status);
+        Assert.Equal(TicketStatus.Available, _seatA1.Status);
+    }
+
+    [Fact]
+    public void Seat_reserved_by_another_buyer_requires_a_reservation()
+    {
+        var result = _handler.Handle(Command(_seatA1.Id, Guid.NewGuid()) with { Email = "other@example.com" });
+
+        Assert.Equal(PurchaseTicketStatus.ReservationRequired, result.Status);
+        Assert.Equal(TicketStatus.Available, _seatA1.Status);
+    }
+
+    [Fact]
+    public void Reservation_holder_email_is_case_insensitive()
+    {
+        var result = _handler.Handle(Command(_seatA1.Id, Guid.NewGuid()) with { Email = "Juan.Perez@Example.com" });
+
+        Assert.Equal(PurchaseTicketStatus.Purchased, result.Status);
+    }
+
+    [Fact]
+    public void Purchase_releases_the_seat_lock_and_remembers_the_key()
+    {
+        var key = Guid.NewGuid();
+
+        _handler.Handle(Command(_seatA1.Id, key));
+
+        Assert.Null(_locks.GetHolder(_seatA1.Id));
+        Assert.Equal(new IdempotencyRecord(KnownEventId, _seatA1.Id), _idempotency.Get(key));
+    }
+
+    [Fact]
+    public void Remembered_key_for_another_seat_is_a_conflict()
+    {
+        var key = Guid.NewGuid();
+        _idempotency.Remember(key, new IdempotencyRecord(KnownEventId, _seatA1.Id), TimeSpan.FromMinutes(1));
+
+        var result = _handler.Handle(Command(_seatA2.Id, key));
+
+        Assert.Equal(PurchaseTicketStatus.IdempotencyKeyConflict, result.Status);
+        Assert.Equal(TicketStatus.Available, _seatA2.Status);
+    }
+
+    private PurchaseTicketHandler Handler(FakeEventCatalog catalog, params Ticket[] tickets) =>
+        new(
+            new TicketPurchaseValidator(catalog),
+            new FakeTicketRepository(tickets),
+            _locks,
+            _idempotency,
+            new NoCache(),
+            NullLogger<PurchaseTicketHandler>.Instance);
+
+    private void Reserve(Guid ticketId) =>
+        _locks.TryAcquire(ticketId, "juan.perez@example.com", TimeSpan.FromMinutes(10));
+
     private static PurchaseTicketCommand Command(Guid ticketId, Guid idempotencyKey) =>
         new(KnownEventId, ticketId, "Juan Perez", "juan.perez@example.com", idempotencyKey);
+
+    private sealed class FakeIdempotencyStore : IIdempotencyStore
+    {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, IdempotencyRecord> _records = new();
+
+        public IdempotencyRecord? Get(Guid idempotencyKey) => _records.GetValueOrDefault(idempotencyKey);
+
+        public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention) =>
+            _records[idempotencyKey] = record;
+    }
 
     private sealed class FakeEventCatalog(params Guid[] knownEvents) : IEventCatalog
     {
@@ -177,20 +254,11 @@ public class PurchaseTicketHandlerTests
             }
         }
 
-        public Ticket GetOrAdd(Guid idempotencyKey, Ticket ticket, out bool wasCreated) => throw new NotSupportedException();
-
         public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
 
         public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId) => throw new NotSupportedException();
 
-        public Ticket? GetById(Guid eventId, Guid ticketId) => throw new NotSupportedException();
-
-        public Ticket? GetById(Guid id) => throw new NotSupportedException();
-
-        public IReadOnlyCollection<Ticket> GetAll() => throw new NotSupportedException();
-
-        public Ticket Update(Ticket ticket) => throw new NotSupportedException();
-
-        public bool Remove(Guid id) => throw new NotSupportedException();
+        public Ticket? GetById(Guid eventId, Guid ticketId) =>
+            _tickets.FirstOrDefault(t => t.Id == ticketId && t.EventId == eventId);
     }
 }

@@ -492,3 +492,7 @@ $RECYCLE.BIN/
 # OpenAPI generated files
 openapi.json
 openapi.yaml
+
+# Local NuGet/dotnet home artifacts
+.local/
+**/.nuget/

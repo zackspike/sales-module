@@ -1,4 +1,5 @@
-using BookingService.Domain;
+using BookingService.Domain.Events;
+using BookingService.Domain.Tickets;
 
 namespace BookingService.Application.Tests.Domain;
 

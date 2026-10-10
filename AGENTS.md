@@ -5,12 +5,38 @@
 BookingService is a .NET application following Domain-Driven Design
 and Clean Architecture principles.
 
-The solution is divided into four projects:
+The solution is divided into four projects plus one test project:
 
 - `BookingService.Api`
 - `BookingService.Application`
 - `BookingService.Domain`
-- `BookingService.Infrastructure`
+- `BookingService.Infrastructure` (EF Core + PostgreSQL, migrations in `Migrations/`; Redis seat locks, idempotency and cache)
+- `BookingService.Application.Tests` (xUnit tests for Domain, Application and Infrastructure)
+
+Other relevant paths:
+
+- `docker-compose.yml`: local PostgreSQL (host port 5433) and Redis (host port 6381).
+- `scripts/`: `bump.sh` (version tag) and `changelog.sh` (release notes).
+- `.github/workflows/`: `validation.yml` (PR lint + tests) and `release.yml` (tag release).
+
+## Commands
+
+Requires the .NET 10 SDK and Docker.
+
+| Purpose | Command |
+|---|---|
+| Restore local tools | `dotnet tool restore` |
+| Build | `dotnet build` |
+| Lint | `dotnet format --verify-no-changes` |
+| Test | `dotnet test` |
+| Start PostgreSQL and Redis | `docker compose up -d` |
+| Apply migrations (incl. seed data) | `dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api` |
+| Add a migration | `dotnet ef migrations add <Name> --project BookingService.Infrastructure --startup-project BookingService.Api` |
+| Run API | `dotnet run --project BookingService.Api` |
+
+PostgreSQL integration tests are skipped unless `ConnectionStrings__DefaultConnection` is set,
+and Redis integration tests unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
+Seed data lives in the `SeedDefaultEvent` migration, not in application code.
 
 ## Architecture
 

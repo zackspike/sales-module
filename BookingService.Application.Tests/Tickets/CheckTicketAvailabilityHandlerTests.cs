@@ -1,7 +1,7 @@
-using BookingService.Application.Repositories;
-using BookingService.Application.Tickets;
+using BookingService.Application.Abstractions;
 using BookingService.Application.Tickets.Queries;
-using BookingService.Domain;
+using BookingService.Domain.Tickets;
+using BookingService.Infrastructure.Caching;
 
 namespace BookingService.Application.Tests.Tickets;
 
@@ -13,13 +13,14 @@ public class CheckTicketAvailabilityHandlerTests
     private readonly Ticket _availableSeat = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-1", Status = TicketStatus.Available };
     private readonly Ticket _soldSeat = new() { Id = Guid.NewGuid(), EventId = KnownEventId, SeatNumber = "A-2", Status = TicketStatus.Sold };
 
+    private readonly InMemorySeatLockStore _locks = new();
     private readonly CheckTicketAvailabilityHandler _handler;
 
     public CheckTicketAvailabilityHandlerTests()
     {
         var catalog = new FakeEventCatalog(KnownEventId);
         var repo = new FakeTicketRepository(_availableSeat, _soldSeat);
-        _handler = new CheckTicketAvailabilityHandler(repo, catalog);
+        _handler = new CheckTicketAvailabilityHandler(repo, catalog, _locks);
     }
 
     [Fact]
@@ -42,6 +43,16 @@ public class CheckTicketAvailabilityHandlerTests
         Assert.Equal(_soldSeat.Id, result.TicketId);
         Assert.Equal("A-2", result.SeatNumber);
         Assert.Equal("Sold", result.Status);
+    }
+
+    [Fact]
+    public void Reports_reserved_for_locked_available_seat()
+    {
+        _locks.TryAcquire(_availableSeat.Id, "juan.perez@example.com", TimeSpan.FromMinutes(10));
+
+        var result = _handler.Handle(new CheckTicketAvailabilityQuery(KnownEventId, _availableSeat.Id));
+
+        Assert.Equal(CheckTicketAvailabilityHandler.ReservedStatus, result!.Status);
     }
 
     [Fact]
@@ -72,14 +83,8 @@ public class CheckTicketAvailabilityHandlerTests
 
         public Ticket? GetById(Guid eventId, Guid ticketId) =>
             _tickets.FirstOrDefault(t => t.EventId == eventId && t.Id == ticketId);
-
-        public Ticket GetOrAdd(Guid idempotencyKey, Ticket ticket, out bool wasCreated) => throw new NotSupportedException();
         public void AddRange(Guid eventId, IEnumerable<Ticket> tickets) => throw new NotSupportedException();
         public IReadOnlyCollection<Ticket> GetByEvent(Guid eventId) => throw new NotSupportedException();
-        public Ticket? GetById(Guid id) => throw new NotSupportedException();
-        public IReadOnlyCollection<Ticket> GetAll() => throw new NotSupportedException();
-        public Ticket Update(Ticket ticket) => throw new NotSupportedException();
-        public bool Remove(Guid id) => throw new NotSupportedException();
         public TicketPurchaseOutcome PurchaseOnce(Guid idempotencyKey, Guid eventId, Guid ticketId, Action<Ticket> purchase) => throw new NotSupportedException();
     }
 }
