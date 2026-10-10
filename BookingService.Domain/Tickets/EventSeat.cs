@@ -7,6 +7,7 @@ public class EventSeat
     public Guid Id { get; private set; }
     public Guid EventId { get; private set; }
     public Guid VenueSeatId { get; private set; } // The physical seat associated. Value owned by VenueService.
+    public Guid ZoneId { get; private set; } // The zone of the seat for a specific event. Value owned by VenueService.
     public SeatStatus Status { get; private set; }
 
 
