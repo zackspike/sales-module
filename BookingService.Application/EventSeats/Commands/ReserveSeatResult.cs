@@ -1,6 +1,6 @@
-using BookingService.Domain.Tickets;
+using BookingService.Application.EventSeats.ReadModels;
 
-namespace BookingService.Application.Tickets.Commands;
+namespace BookingService.Application.EventSeats.Commands;
 
 public enum ReserveSeatStatus
 {
@@ -13,8 +13,8 @@ public enum ReserveSeatStatus
     /// <summary>The target event does not exist (HTTP 404).</summary>
     EventNotFound,
 
-    /// <summary>The seat does not exist in the event (HTTP 404).</summary>
-    TicketNotFound,
+    /// <summary>The event seat does not exist in the event (HTTP 404).</summary>
+    EventSeatNotFound,
 
     /// <summary>The seat was already sold (HTTP 409).</summary>
     AlreadySold,
@@ -24,25 +24,24 @@ public enum ReserveSeatStatus
 }
 
 /// <summary>
-/// Outcome of <see cref="ReserveSeatHandler"/>. <see cref="Ticket"/> and <see cref="ExpiresAtUtc"/>
-/// are set only for <see cref="ReserveSeatStatus.Reserved"/>; <see cref="Errors"/> only for
+/// Outcome of <see cref="ReserveSeatHandler"/>. <see cref="Seat"/> is set only for
+/// <see cref="ReserveSeatStatus.Reserved"/>; <see cref="Errors"/> only for
 /// <see cref="ReserveSeatStatus.Invalid"/>.
 /// </summary>
 public sealed record ReserveSeatResult(
     ReserveSeatStatus Status,
-    Ticket? Ticket,
-    DateTime? ExpiresAtUtc,
+    ReservedSeat? Seat,
     IReadOnlyDictionary<string, string[]> Errors)
 {
     private static readonly IReadOnlyDictionary<string, string[]> NoErrors =
         new Dictionary<string, string[]>();
 
-    public static ReserveSeatResult Reserved(Ticket ticket, DateTime expiresAtUtc) =>
-        new(ReserveSeatStatus.Reserved, ticket, expiresAtUtc, NoErrors);
+    public static ReserveSeatResult Reserved(ReservedSeat seat) =>
+        new(ReserveSeatStatus.Reserved, seat, NoErrors);
 
     public static ReserveSeatResult Invalid(IReadOnlyDictionary<string, string[]> errors) =>
-        new(ReserveSeatStatus.Invalid, null, null, errors);
+        new(ReserveSeatStatus.Invalid, null, errors);
 
     public static ReserveSeatResult Failed(ReserveSeatStatus status) =>
-        new(status, null, null, NoErrors);
+        new(status, null, NoErrors);
 }

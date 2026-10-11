@@ -1,31 +1,31 @@
 using System.Net.Mail;
 using BookingService.Application.Abstractions;
 
-namespace BookingService.Application.Tickets.Commands;
+namespace BookingService.Application.EventSeats.Commands;
 
 /// <summary>
-/// Validates a ticket purchase (SP-05 / VAL-02): required fields and email format
+/// Validates an event seat reservation or purchase (SP-05 / VAL-02): required fields and email format
 /// first (400), then event existence (404).
 /// </summary>
-public sealed class TicketPurchaseValidator
+public sealed class SeatPurchaseValidator
 {
     // RFC 5321 maximum length of a forward-path.
     private const int MaxEmailLength = 254;
 
     private readonly IEventCatalog _events;
 
-    public TicketPurchaseValidator(IEventCatalog events)
+    public SeatPurchaseValidator(IEventCatalog events)
     {
         _events = events;
     }
 
-    public TicketPurchaseValidationResult Validate(PurchaseTicketCommand command) =>
+    public SeatPurchaseValidationResult Validate(PurchaseEventSeatCommand command) =>
         Validate(command.EventId, command.FullName, command.Email);
 
     /// <summary>
     /// Validates the buyer data and event of any step of the purchase flow (reservation or purchase).
     /// </summary>
-    public TicketPurchaseValidationResult Validate(Guid eventId, string? fullName, string? email)
+    public SeatPurchaseValidationResult Validate(Guid eventId, string? fullName, string? email)
     {
         var errors = new Dictionary<string, string[]>();
 
@@ -45,12 +45,12 @@ public sealed class TicketPurchaseValidator
 
         if (errors.Count > 0)
         {
-            return TicketPurchaseValidationResult.Invalid(errors);
+            return SeatPurchaseValidationResult.Invalid(errors);
         }
 
         return _events.Exists(eventId)
-            ? TicketPurchaseValidationResult.Valid()
-            : TicketPurchaseValidationResult.EventNotFound();
+            ? SeatPurchaseValidationResult.Valid()
+            : SeatPurchaseValidationResult.EventNotFound();
     }
 
     private static bool IsValidEmail(string email)
