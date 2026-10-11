@@ -1,6 +1,6 @@
-using BookingService.Domain.Exceptions;
+using BookingService.Domain.Tickets;
 
-namespace BookingService.Domain.Tickets;
+namespace BookingService.Domain.EventSeats;
 
 public class EventSeat
 {

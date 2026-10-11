@@ -1,4 +1,4 @@
-namespace BookingService.Domain.Tickets;
+namespace BookingService.Domain.Venues;
 
 /// <summary>
 /// Represents a physical seat in a venue, in the booking domain.

@@ -1,4 +1,5 @@
-using BookingService.Domain.Tickets;
+using BookingService.Domain.EventSeats;
+using BookingService.Domain.Venues;
 
 namespace BookingService.Domain.Events;
 

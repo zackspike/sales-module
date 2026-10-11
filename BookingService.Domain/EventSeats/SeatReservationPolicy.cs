@@ -1,4 +1,4 @@
-namespace BookingService.Domain.Tickets;
+namespace BookingService.Domain.EventSeats;
 
 /// <summary>
 /// Rules of the temporary seat reservation taken when a fan clicks "comprar".

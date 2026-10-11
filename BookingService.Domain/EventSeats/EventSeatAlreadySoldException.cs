@@ -1,6 +1,6 @@
 using BookingService.Domain.Common;
 
-namespace BookingService.Domain.Exceptions;
+namespace BookingService.Domain.EventSeats;
 
 public sealed class EventSeatAlreadySoldException : DomainException
 {

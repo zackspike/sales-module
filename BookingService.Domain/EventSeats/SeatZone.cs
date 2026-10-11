@@ -1,4 +1,4 @@
-namespace BookingService.Domain.Tickets;
+namespace BookingService.Domain.EventSeats;
 
 public record SeatZone
 {
