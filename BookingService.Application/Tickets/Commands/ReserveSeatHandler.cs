@@ -6,7 +6,7 @@ namespace BookingService.Application.Tickets.Commands;
 /// <summary>
 /// First step of the purchase flow: the fan selects a seat and clicks "comprar".
 /// Validates name, email and event (400/404), checks the seat is not sold, and locks it for the
-/// buyer (identified by email) during <see cref="SeatReservationPolicy.LockDuration"/>.
+/// buyer (identified by email) during <see cref="EventSeatReservationPolicy.LockDuration"/>.
 /// </summary>
 public sealed class ReserveSeatHandler
 {
@@ -47,9 +47,9 @@ public sealed class ReserveSeatHandler
         }
 
         var holder = SeatLockHolder.From(command.Email!);
-        var expiresAtUtc = DateTime.UtcNow + SeatReservationPolicy.LockDuration;
+        var expiresAtUtc = DateTime.UtcNow + EventSeatReservationPolicy.LockDuration;
 
-        if (_seatLocks.TryAcquire(ticket.Id, holder, SeatReservationPolicy.LockDuration) == SeatLockResult.HeldByAnother)
+        if (_seatLocks.TryAcquire(ticket.Id, holder, EventSeatReservationPolicy.LockDuration) == SeatLockResult.HeldByAnother)
         {
             return ReserveSeatResult.Failed(ReserveSeatStatus.LockedByAnotherBuyer);
         }

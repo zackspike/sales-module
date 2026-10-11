@@ -1,10 +1,20 @@
+using BookingService.Domain.Events;
+
 namespace BookingService.Application.Abstractions;
 
 /// <summary>
-/// Lookup used by purchase and availability queries to check that an event is known.
-/// Implemented by Infrastructure (in-memory or PostgreSQL event store).
+/// Data from EventService. Read-only.
+/// Used to reject requests for unknown events (404) and to read the event data a use case needs.
 /// </summary>
 public interface IEventCatalog
 {
+    /// <summary>
+    /// Returns true if the event with the given id exists, false otherwise.
+    /// </summary>
     bool Exists(Guid eventId);
+
+    /// <summary>
+    /// Returns the event with the given id, or null if it does not exist.
+    /// </summary>
+    Event? GetById(Guid eventId);
 }
