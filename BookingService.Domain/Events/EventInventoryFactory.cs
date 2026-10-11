@@ -16,7 +16,7 @@ public static class EventInventoryFactory
 
         foreach (var venueSeat in venueSeats)
         {
-            var eventSeat = EventSeat.CreateAvailable(eventId, venueSeat.Id);
+            var eventSeat = EventSeat.CreateAvailable(eventId, venueSeat.Id, venueSeat.ZoneId);
             eventSeats.Add(eventSeat);
         }
 

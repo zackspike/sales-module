@@ -13,15 +13,16 @@ public class EventSeat
 
 
     /// <summary>
-    /// Creates a new available event seat for the given event and venue seat. The seat is initially available for purchase.
+    /// Creates a new available event seat for the given event, venue seat and zone. The seat is initially available for purchase.
     /// </summary>
-    public static EventSeat CreateAvailable(Guid eventId, Guid venueSeatId)
+    public static EventSeat CreateAvailable(Guid eventId, Guid venueSeatId, Guid zoneId)
     {
         return new EventSeat
         {
             Id = Guid.NewGuid(),
             EventId = eventId,
             VenueSeatId = venueSeatId,
+            ZoneId = zoneId,
             Status = SeatStatus.Available
         };
     }
