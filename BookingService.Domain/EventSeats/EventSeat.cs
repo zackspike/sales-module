@@ -8,7 +8,7 @@ public class EventSeat
     public Guid EventId { get; private set; }
     public Guid VenueSeatId { get; private set; } // The physical seat associated. Value owned by VenueService.
     public Guid ZoneId { get; private set; } // The zone of the seat for a specific event. Value owned by VenueService.
-    public SeatStatus Status { get; private set; }
+    public EventSeatStatus Status { get; private set; }
 
 
 
@@ -23,7 +23,7 @@ public class EventSeat
             EventId = eventId,
             VenueSeatId = venueSeatId,
             ZoneId = zoneId,
-            Status = SeatStatus.Available
+            Status = EventSeatStatus.Available
         };
     }
 
@@ -33,9 +33,9 @@ public class EventSeat
     /// <exception cref="EventSeatAlreadySoldException"></exception>
     public Ticket Sell(string holderName, string holderEmail, DateTime soldAtUtc)
     {
-        if (Status == SeatStatus.Sold) throw new EventSeatAlreadySoldException(Id);
+        if (Status == EventSeatStatus.Sold) throw new EventSeatAlreadySoldException(Id);
 
-        Status = SeatStatus.Sold;
+        Status = EventSeatStatus.Sold;
 
         return Ticket.Issue(Id, holderName, holderEmail, soldAtUtc);
     }

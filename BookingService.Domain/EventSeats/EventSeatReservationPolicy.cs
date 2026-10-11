@@ -3,7 +3,7 @@ namespace BookingService.Domain.EventSeats;
 /// <summary>
 /// Rules of the temporary seat reservation taken when a fan clicks "comprar".
 /// </summary>
-public static class SeatReservationPolicy
+public static class EventSeatReservationPolicy
 {
     /// <summary>
     /// How long a seat stays locked for the fan who reserved it before others can take it.
