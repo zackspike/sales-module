@@ -1,7 +1,6 @@
-using BookingService.Domain.EventSeats;
 using BookingService.Domain.Venues;
 
-namespace BookingService.Domain.Events;
+namespace BookingService.Domain.EventSeats;
 
 /// <summary>
 /// Domain factory that generates event seats for a given event based on the venue seats.

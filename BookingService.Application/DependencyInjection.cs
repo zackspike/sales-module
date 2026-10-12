@@ -11,11 +11,10 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        services.AddScoped<SeatPurchaseValidator>();
-        services.AddScoped<ReserveSeatHandler>();
+        services.AddScoped<ReserveEventSeatHandler>();
         services.AddScoped<PurchaseEventSeatHandler>();
         services.AddScoped<GetAvailableEventSeatsHandler>();
-        services.AddScoped<CheckEventSeatAvailabilityHandler>();
+        services.AddScoped<GetEventSeatAvailabilityHandler>();
         return services;
     }
 }

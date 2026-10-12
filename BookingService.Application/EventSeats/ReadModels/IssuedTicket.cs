@@ -2,6 +2,7 @@ namespace BookingService.Application.EventSeats.ReadModels;
 
 /// <summary>
 /// The ticket issued when an event seat is sold, together with the seat it grants.
+/// Returned by the purchase use case instead of the domain <see cref="Domain.Tickets.Ticket"/> entity.
 /// </summary>
 /// <param name="EventSeatId">Unique identifier of the sold event seat.</param>
 /// <param name="EventId">Unique identifier of the event.</param>

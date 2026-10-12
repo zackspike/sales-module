@@ -8,9 +8,16 @@ public class EventSeat
     public Guid EventId { get; private set; }
     public Guid VenueSeatId { get; private set; } // The physical seat associated. Value owned by VenueService.
     public Guid ZoneId { get; private set; } // The zone of the seat for a specific event. Value owned by VenueService.
+
+    /// <summary>
+    /// Sale status of the seat. Temporary reservations are not part of it.
+    /// </summary>
     public EventSeatStatus Status { get; private set; }
 
-
+    // Only CreateAvailable (and EF Core, through reflection) can build an event seat.
+    private EventSeat()
+    {
+    }
 
     /// <summary>
     /// Creates a new available event seat for the given event, venue seat and zone. The seat is initially available for purchase.
@@ -33,7 +40,10 @@ public class EventSeat
     /// <exception cref="EventSeatAlreadySoldException"></exception>
     public Ticket Sell(string holderName, string holderEmail, DateTime soldAtUtc)
     {
-        if (Status == EventSeatStatus.Sold) throw new EventSeatAlreadySoldException(Id);
+        if (Status == EventSeatStatus.Sold)
+        {
+            throw new EventSeatAlreadySoldException(Id);
+        }
 
         Status = EventSeatStatus.Sold;
 

@@ -6,7 +6,7 @@ namespace BookingService.Domain.EventSeats;
 public static class EventSeatReservationPolicy
 {
     /// <summary>
-    /// How long a seat stays locked for the fan who reserved it before others can take it.
+    /// How long a seat stays reserved for the fan who reserved it before others can take it.
     /// </summary>
-    public static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(10);
+    public static readonly TimeSpan Duration = TimeSpan.FromMinutes(10);
 }

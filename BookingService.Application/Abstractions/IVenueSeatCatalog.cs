@@ -9,11 +9,6 @@ namespace BookingService.Application.Abstractions;
 public interface IVenueSeatCatalog
 {
     /// <summary>
-    /// Returns true if the venue seat with the given id exists, false otherwise.
-    /// </summary>
-    bool Exists(Guid venueSeatId);
-
-    /// <summary>
     /// Returns the venue seat with the given id, or null if it does not exist.
     /// </summary>
     VenueSeat? GetById(Guid venueSeatId);

@@ -43,8 +43,6 @@ public sealed record PurchaseEventSeatResult(
     private static readonly IReadOnlyDictionary<string, string[]> NoErrors =
         new Dictionary<string, string[]>();
 
-    public bool IsSuccess => Status is PurchaseEventSeatStatus.Purchased or PurchaseEventSeatStatus.Replayed;
-
     public static PurchaseEventSeatResult Purchased(IssuedTicket ticket) =>
         new(PurchaseEventSeatStatus.Purchased, ticket, NoErrors);
 

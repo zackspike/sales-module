@@ -5,18 +5,18 @@ using BookingService.Domain.EventSeats;
 namespace BookingService.Application.EventSeats.Queries;
 
 /// <summary>
-/// Handles checking the availability of a specific event seat (SP-04 / APP-02).
+/// Handles getting the availability of a specific event seat (SP-04 / APP-02).
 /// The status is <c>Sold</c> or <c>Available</c> as stored in the repository, or
 /// <see cref="EventSeatAvailabilityStatus.Reserved"/> when an available seat is locked by a fan.
 /// </summary>
-public sealed class CheckEventSeatAvailabilityHandler
+public sealed class GetEventSeatAvailabilityHandler
 {
     private readonly IEventSeatRepository _eventSeatRepository;
     private readonly IEventCatalog _eventCatalog;
     private readonly IEventSeatLockStore _eventSeatLocks;
     private readonly IVenueSeatCatalog _venueSeatCatalog;
 
-    public CheckEventSeatAvailabilityHandler(
+    public GetEventSeatAvailabilityHandler(
         IEventSeatRepository eventSeatRepository,
         IEventCatalog eventCatalog,
         IEventSeatLockStore eventSeatLocks,
@@ -31,7 +31,7 @@ public sealed class CheckEventSeatAvailabilityHandler
     /// <summary>
     /// Returns the availability information for the seat, or null if the event or event seat is not found.
     /// </summary>
-    public EventSeatAvailability? Handle(CheckEventSeatAvailabilityQuery query)
+    public EventSeatAvailability? Handle(GetEventSeatAvailabilityQuery query)
     {
         if (!_eventCatalog.Exists(query.EventId))
         {

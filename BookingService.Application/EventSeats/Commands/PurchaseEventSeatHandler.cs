@@ -6,9 +6,9 @@ using Microsoft.Extensions.Logging;
 namespace BookingService.Application.EventSeats.Commands;
 
 /// <summary>
-/// Buys a reserved event seat and issues its ticket (SP-05 / SP-06 / APP-04): validates name, email
-/// and event (400/404), answers duplicated requests from the idempotency store or the repository,
-/// requires the buyer to hold the seat lock taken by <see cref="ReserveSeatHandler"/> (403), and then
+/// Buys a reserved event seat and issues its ticket (SP-05 / SP-06 / APP-04): validates name and email
+/// (400), checks the event exists (404), answers duplicated requests from the idempotency store or the repository,
+/// requires the buyer to hold the seat lock taken by <see cref="ReserveEventSeatHandler"/> (403), and then
 /// sells the seat atomically and idempotently through <see cref="IEventSeatRepository.SellOnce"/>.
 /// The "a seat is sold only once" rule lives in <see cref="EventSeat.Sell"/>.
 /// </summary>
@@ -19,7 +19,7 @@ public sealed class PurchaseEventSeatHandler
     /// </summary>
     public static readonly TimeSpan IdempotencyKeyRetention = TimeSpan.FromMinutes(10);
 
-    private readonly SeatPurchaseValidator _validator;
+    private readonly IEventCatalog _eventCatalog;
     private readonly IEventSeatRepository _eventSeatRepository;
     private readonly IVenueSeatCatalog _venueSeatCatalog;
     private readonly IEventSeatLockStore _eventSeatLocks;
@@ -28,7 +28,7 @@ public sealed class PurchaseEventSeatHandler
     private readonly ILogger<PurchaseEventSeatHandler> _logger;
 
     public PurchaseEventSeatHandler(
-        SeatPurchaseValidator validator,
+        IEventCatalog eventCatalog,
         IEventSeatRepository eventSeatRepository,
         IVenueSeatCatalog venueSeatCatalog,
         IEventSeatLockStore eventSeatLocks,
@@ -36,7 +36,7 @@ public sealed class PurchaseEventSeatHandler
         IAvailableEventSeatsCache availableEventSeatsCache,
         ILogger<PurchaseEventSeatHandler> logger)
     {
-        _validator = validator;
+        _eventCatalog = eventCatalog;
         _eventSeatRepository = eventSeatRepository;
         _venueSeatCatalog = venueSeatCatalog;
         _eventSeatLocks = eventSeatLocks;
@@ -47,28 +47,27 @@ public sealed class PurchaseEventSeatHandler
 
     public PurchaseEventSeatResult Handle(PurchaseEventSeatCommand command)
     {
-        var validation = _validator.Validate(command);
-
-        if (validation.Status == SeatPurchaseValidationStatus.Invalid)
+        var errors = TicketHolderValidator.Validate(command.FullName, command.Email);
+        if (errors.Count > 0)
         {
-            return PurchaseEventSeatResult.Invalid(validation.Errors);
+            return PurchaseEventSeatResult.Invalid(errors);
         }
 
         if (command.IdempotencyKey == Guid.Empty)
         {
             return PurchaseEventSeatResult.Invalid(new Dictionary<string, string[]>
             {
-                ["idempotencyKey"] = ["X-Idempotency-Key is required."]
+                ["idempotencyKey"] = ["idempotencyKey must be a non-empty UUID."]
             });
         }
 
-        if (validation.Status == SeatPurchaseValidationStatus.EventNotFound)
+        if (!_eventCatalog.Exists(command.EventId))
         {
             return PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.EventNotFound);
         }
 
-        var fullName = command.FullName!.Trim();
-        var email = command.Email!.Trim();
+        var fullName = command.FullName.Trim();
+        var email = command.Email.Trim();
 
         if (_idempotency.GetIdempotencyRecord(command.IdempotencyKey) is { } remembered)
         {
@@ -89,7 +88,7 @@ public sealed class PurchaseEventSeatHandler
             return SoldSeatResult(command, seatNumber);
         }
 
-        var holder = SeatLockHolder.From(email);
+        var holder = EventSeatLockHolder.From(email);
         if (_eventSeatLocks.GetHolderIdentifier(eventSeat.Id) != holder)
         {
             // A concurrent purchase may have sold the seat and released its lock after the check
@@ -100,7 +99,7 @@ public sealed class PurchaseEventSeatHandler
                 : PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.ReservationRequired);
         }
 
-        SeatSaleOutcome outcome;
+        EventSeatSaleOutcome outcome;
         try
         {
             outcome = _eventSeatRepository.SellOnce(
@@ -153,7 +152,7 @@ public sealed class PurchaseEventSeatHandler
     /// Updates the hot-path stores once the sale is durable. Failures are only logged: the sale is
     /// already committed, the lock and cache expire on their own, and replays fall back to the repository.
     /// </summary>
-    private void AfterPurchaseCommitted(SeatSale sale, PurchaseEventSeatCommand command, string holder)
+    private void AfterPurchaseCommitted(EventSeatSale sale, PurchaseEventSeatCommand command, string holder)
     {
         try
         {
@@ -178,7 +177,7 @@ public sealed class PurchaseEventSeatHandler
             ?? throw new InvalidOperationException(
                 $"Event seat {eventSeat.Id} references venue seat {eventSeat.VenueSeatId}, which is not in the catalog.");
 
-    private static IssuedTicket ToIssuedTicket(SeatSale sale, string seatNumber) => new(
+    private static IssuedTicket ToIssuedTicket(EventSeatSale sale, string seatNumber) => new(
         sale.Seat.Id,
         sale.Seat.EventId,
         seatNumber,

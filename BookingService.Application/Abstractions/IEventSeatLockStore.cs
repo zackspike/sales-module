@@ -11,7 +11,7 @@ public interface IEventSeatLockStore
     /// Locks <paramref name="eventSeatId"/> for <paramref name="holderIdentifier"/> during <paramref name="duration"/>.
     /// If the same holder already has it, the lock is renewed for another <paramref name="duration"/>.
     /// </summary>
-    SeatLockResult TryAcquire(Guid eventSeatId, string holderIdentifier, TimeSpan duration);
+    EventSeatLockResult TryAcquire(Guid eventSeatId, string holderIdentifier, TimeSpan duration);
 
     /// <summary>
     /// Returns the holder of the lock of <paramref name="eventSeatId"/>, or null if it is not locked.
@@ -32,7 +32,7 @@ public interface IEventSeatLockStore
 /// <summary>
 /// Outcome of <see cref="IEventSeatLockStore.TryAcquire"/>.
 /// </summary>
-public enum SeatLockResult
+public enum EventSeatLockResult
 {
     /// <summary>The event seat was free and is now locked for the holder.</summary>
     Acquired,
