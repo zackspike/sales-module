@@ -1,0 +1,12 @@
+{
+  "files": {
+    "__files/event-management-api/create-event-success.json": "sha256:5664e3b4d933d77515a86779719e421a4a3b2e96d03e0ea8e4b9bd6608c9845c",
+    "__files/event-management-api/get-event-by-id-success.json": "sha256:494a526d56ece7810072f48521d76f7172df2140df60a30a6533a2405a59fa06",
+    "__files/event-management-api/get-events-success.json": "sha256:00423ebe2d8de526ea9e5fcb608c3e2026f748ae5193532b9106877b48194efc",
+    "__files/event-management-api/health-check-success.json": "sha256:6707e81f00164895e6eb4fb6270488c0c9f2e35a4fa23ff6cc15010ad72b8353",
+    "mappings/event-management-api/create-event-success.json": "sha256:5e5e3a9ddb1a7bea50ae56e2b8f0ee88c1fa798453850cab8c8ce092377a453d",
+    "mappings/event-management-api/get-event-by-id-success.json": "sha256:57bee8daabe9dfc488d8448f034d2eaef075c0389f055f91517eecc3c872e03d",
+    "mappings/event-management-api/get-events-success.json": "sha256:43dab1cb0a0307e5a6175e34d0607aff6e3d90666101f2e79e0419b937b815e5",
+    "mappings/event-management-api/health-check-success.json": "sha256:18fd437c2253fa9ee8b46d519090ca231df21695d13ec9ac354a5ab2cab69624"
+  }
+}

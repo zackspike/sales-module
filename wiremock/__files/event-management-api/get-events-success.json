@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "artist": "artist",
+      "event_type": "event_type",
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "min_price": "min_price",
+      "name": "name",
+      "organizer_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "schedules": [
+        {
+          "ends_at": "2026-01-01T12:00:00Z",
+          "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          "starts_at": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "status": "status",
+      "venue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+    }
+  ],
+  "page": 0,
+  "per_page": 0,
+  "total_items": 0,
+  "total_pages": 0
+}
