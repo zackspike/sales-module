@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/node_modules/
+.git/
+.github/
+.agents/
+.claude/
+.vscode/
+docs/
+*.md
+openapi.json
+docker-compose.yml
+BookingService.Application.Tests/
