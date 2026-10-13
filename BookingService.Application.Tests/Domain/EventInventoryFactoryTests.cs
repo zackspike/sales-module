@@ -1,5 +1,5 @@
-using BookingService.Domain.Events;
-using BookingService.Domain.Tickets;
+using BookingService.Domain.EventSeats;
+using BookingService.Domain.Venues;
 
 namespace BookingService.Application.Tests.Domain;
 
@@ -8,61 +8,46 @@ public class EventInventoryFactoryTests
     private static readonly Guid EventId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     [Fact]
-    public void Creates_exact_number_of_available_tickets()
+    public void Generates_one_available_event_seat_per_venue_seat()
     {
-        var tickets = EventInventoryFactory.CreateInitialInventory(EventId, 50);
+        var zoneA = Guid.NewGuid();
+        var zoneB = Guid.NewGuid();
+        VenueSeat[] venueSeats =
+        [
+            new(Guid.NewGuid(), zoneA, "A-1"),
+            new(Guid.NewGuid(), zoneA, "A-2"),
+            new(Guid.NewGuid(), zoneB, "B-1")
+        ];
 
-        Assert.Equal(50, tickets.Count);
-        Assert.All(tickets, t =>
+        var eventSeats = EventInventoryFactory.GenerateEventSeats(EventId, venueSeats);
+
+        Assert.Equal(venueSeats.Length, eventSeats.Count);
+        Assert.All(eventSeats.Zip(venueSeats), pair =>
         {
-            Assert.Equal(EventId, t.EventId);
-            Assert.Equal(TicketStatus.Available, t.Status);
-            Assert.NotEqual(Guid.Empty, t.Id);
-            Assert.Null(t.PurchasedAtUtc);
-            Assert.Empty(t.TicketCode);
+            var (eventSeat, venueSeat) = pair;
+            Assert.Equal(EventId, eventSeat.EventId);
+            Assert.Equal(venueSeat.Id, eventSeat.VenueSeatId);
+            Assert.Equal(venueSeat.ZoneId, eventSeat.ZoneId);
+            Assert.Equal(EventSeatStatus.Available, eventSeat.Status);
         });
     }
 
     [Fact]
-    public void Creates_unique_ticket_ids_and_correct_seat_numbers()
+    public void Generated_event_seats_have_unique_ids()
     {
-        var tickets = EventInventoryFactory.CreateInitialInventory(EventId, 5, "VIP");
+        var venueSeats = Enumerable.Range(1, 100)
+            .Select(n => new VenueSeat(Guid.NewGuid(), Guid.NewGuid(), $"A-{n}"));
 
-        Assert.Equal(5, tickets.Select(t => t.Id).Distinct().Count());
-        Assert.Equal(["VIP-1", "VIP-2", "VIP-3", "VIP-4", "VIP-5"], tickets.Select(t => t.SeatNumber));
+        var eventSeats = EventInventoryFactory.GenerateEventSeats(EventId, venueSeats);
+
+        Assert.Equal(100, eventSeats.Select(s => s.Id).Distinct().Count());
     }
 
     [Fact]
-    public void Overload_with_event_instance_reads_properties_correctly()
+    public void Generates_no_event_seats_for_a_venue_without_seats()
     {
-        var @event = new Event
-        {
-            Id = EventId,
-            Name = "Rock Fest 2026",
-            TotalSeats = 10
-        };
+        var eventSeats = EventInventoryFactory.GenerateEventSeats(EventId, []);
 
-        var tickets = EventInventoryFactory.CreateInitialInventory(@event);
-
-        Assert.Equal(10, tickets.Count);
-        Assert.Equal("A-1", tickets[0].SeatNumber);
-        Assert.Equal("A-10", tickets[9].SeatNumber);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(-50)]
-    public void Throws_when_total_seats_is_not_positive(int totalSeats)
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            EventInventoryFactory.CreateInitialInventory(EventId, totalSeats));
-    }
-
-    [Fact]
-    public void Throws_when_event_id_is_empty()
-    {
-        Assert.Throws<ArgumentException>(() =>
-            EventInventoryFactory.CreateInitialInventory(Guid.Empty, 10));
+        Assert.Empty(eventSeats);
     }
 }
