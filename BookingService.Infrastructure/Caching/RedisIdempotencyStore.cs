@@ -5,7 +5,7 @@ using StackExchange.Redis;
 namespace BookingService.Infrastructure.Caching;
 
 /// <summary>
-/// Used idempotency keys as Redis strings <c>booking:idempotency:{key} = {"EventId","TicketId"}</c> with a TTL.
+/// Used idempotency keys stored as Redis strings <c>booking:idempotency:{key} = {"EventId","EventSeatId"}</c> with a TTL.
 /// </summary>
 public sealed class RedisIdempotencyStore : IIdempotencyStore
 {
@@ -13,20 +13,44 @@ public sealed class RedisIdempotencyStore : IIdempotencyStore
 
     public RedisIdempotencyStore(IConnectionMultiplexer redis)
     {
+        ArgumentNullException.ThrowIfNull(redis);
         _redis = redis;
     }
 
-    public IdempotencyRecord? Get(Guid idempotencyKey)
+    private IDatabase Database => _redis.GetDatabase();
+
+    public IdempotencyRecord? GetIdempotencyRecord(Guid idempotencyKey)
     {
-        var value = _redis.GetDatabase().StringGet(RedisKeys.Idempotency(idempotencyKey));
-        return value.HasValue ? JsonSerializer.Deserialize<IdempotencyRecord>(value.ToString()) : null;
+        var value = Database.StringGet(RedisKeys.Idempotency(idempotencyKey));
+        if (value.IsNullOrEmpty)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<IdempotencyRecord>((byte[])value!);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
+
+    /// <summary>
+    /// Backwards-compatible alias for <see cref="GetIdempotencyRecord"/>.
+    /// </summary>
+    public IdempotencyRecord? Get(Guid idempotencyKey) => GetIdempotencyRecord(idempotencyKey);
 
     public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention)
     {
-        _redis.GetDatabase().StringSet(
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retention, TimeSpan.Zero);
+
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(record);
+        Database.StringSet(
             RedisKeys.Idempotency(idempotencyKey),
-            JsonSerializer.Serialize(record),
+            bytes,
             retention);
     }
 }
