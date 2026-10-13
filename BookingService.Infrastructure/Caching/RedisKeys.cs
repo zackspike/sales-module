@@ -7,7 +7,7 @@ namespace BookingService.Infrastructure.Caching;
 /// </summary>
 internal static class RedisKeys
 {
-    public static RedisKey SeatLock(Guid ticketId) => $"booking:seat-lock:{ticketId}";
+    public static RedisKey SeatLock(Guid eventSeatId) => $"booking:seat-lock:{eventSeatId}";
 
     public static RedisKey Idempotency(Guid idempotencyKey) => $"booking:idempotency:{idempotencyKey}";
 
