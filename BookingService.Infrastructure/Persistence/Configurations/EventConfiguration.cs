@@ -16,7 +16,10 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
             .IsRequired()
             .HasMaxLength(200);
 
-        builder.Property(e => e.Artist)
+        builder.Property(e => e.ArtistId)
+            .IsRequired();
+
+        builder.Property(e => e.ArtistName)
             .IsRequired()
             .HasMaxLength(200);
 
@@ -27,10 +30,13 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
             .IsRequired()
             .HasMaxLength(200);
 
-        builder.Property(e => e.Date)
+        builder.Property(e => e.EventDateTime)
             .IsRequired();
 
-        builder.Property(e => e.TotalSeats)
+        builder.Property(e => e.EventSalesStartDateTime)
+            .IsRequired();
+
+        builder.Property(e => e.EventSalesEndDateTime)
             .IsRequired();
     }
 }

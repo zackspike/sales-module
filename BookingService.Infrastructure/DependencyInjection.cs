@@ -19,6 +19,9 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration? configuration = null)
     {
+        // Until VenueService is integrated, the venue seat catalog is served from the agreed test data.
+        services.AddSingleton<IVenueSeatCatalog, InMemoryVenueSeatCatalog>();
+
         var connectionString = configuration?.GetConnectionString("DefaultConnection");
 
         if (!string.IsNullOrWhiteSpace(connectionString))
@@ -27,12 +30,12 @@ public static class DependencyInjection
                 options.UseNpgsql(connectionString));
 
             services.AddScoped<IEventCatalog, PostgresEventCatalog>();
-            services.AddScoped<ITicketRepository, PostgresTicketRepository>();
+            services.AddScoped<IEventSeatRepository, PostgresEventSeatRepository>();
         }
         else
         {
             services.AddSingleton<IEventCatalog, InMemoryEventCatalog>();
-            services.AddSingleton<ITicketRepository>(_ => new InMemoryTicketRepository(seedDefaultInventory: true));
+            services.AddSingleton<IEventSeatRepository>(_ => new InMemoryEventSeatRepository(seedDefaultInventory: true));
         }
 
         var redisConnectionString = configuration?.GetConnectionString("Redis");
