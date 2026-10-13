@@ -16,7 +16,8 @@ public class InMemoryEventCatalogTests
         var defaultEvent = _catalog.GetById(defaultId);
         Assert.NotNull(defaultEvent);
         Assert.Equal("Rock Fest 2026", defaultEvent.Name);
-        Assert.Equal(50, defaultEvent.TotalSeats);
+        Assert.Equal("The Rockers", defaultEvent.ArtistName);
+        Assert.Equal("Estadio Nacional", defaultEvent.VenueName);
     }
 
     [Fact]
@@ -30,16 +31,16 @@ public class InMemoryEventCatalogTests
     public void Adding_event_makes_it_available()
     {
         var customId = Guid.NewGuid();
-        var customEvent = new Event
-        {
-            Id = customId,
-            Name = "Jazz Night",
-            Artist = "The Smooth",
-            VenueId = Guid.NewGuid(),
-            VenueName = "Teatro Principal",
-            Date = DateTime.UtcNow.AddDays(10),
-            TotalSeats = 100
-        };
+        var customEvent = new Event(
+            customId,
+            "Jazz Night",
+            Guid.NewGuid(),
+            "The Smooth",
+            Guid.NewGuid(),
+            "Teatro Principal",
+            DateTime.UtcNow.AddDays(10),
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(11));
 
         _catalog.Add(customEvent);
 
