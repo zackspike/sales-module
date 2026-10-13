@@ -22,27 +22,67 @@ namespace BookingService.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BookingService.Domain.EventSeats.EventSeat", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("VenueSeatId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ZoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId", "VenueSeatId")
+                        .IsUnique();
+
+                    b.ToTable("event_seats", (string)null);
+                });
+
             modelBuilder.Entity("BookingService.Domain.Events.Event", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Artist")
+                    b.Property<Guid>("ArtistId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ArtistName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<DateTime>("Date")
+                    b.Property<DateTime>("EventDateTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("EventSalesEndDateTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("EventSalesStartDateTime")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<int>("TotalSeats")
-                        .HasColumnType("integer");
 
                     b.Property<Guid>("VenueId")
                         .HasColumnType("uuid");
@@ -63,66 +103,56 @@ namespace BookingService.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<Guid>("EventId")
+                    b.Property<Guid>("EventSeatId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("FullName")
+                    b.Property<string>("HolderEmail")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("HolderName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("IdempotencyKey")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("PurchasedAtUtc")
+                    b.Property<DateTime>("SoldAtUtc")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SeatNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
 
                     b.Property<string>("TicketCode")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
                     b.HasKey("Id");
+
+                    b.HasIndex("EventSeatId")
+                        .IsUnique();
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique()
                         .HasFilter("\"IdempotencyKey\" != '00000000-0000-0000-0000-000000000000'");
 
-                    b.HasIndex("EventId", "SeatNumber")
-                        .IsUnique();
-
                     b.ToTable("tickets", (string)null);
                 });
 
-            modelBuilder.Entity("BookingService.Domain.Tickets.Ticket", b =>
+            modelBuilder.Entity("BookingService.Domain.EventSeats.EventSeat", b =>
                 {
                     b.HasOne("BookingService.Domain.Events.Event", null)
                         .WithMany()
                         .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BookingService.Domain.Tickets.Ticket", b =>
+                {
+                    b.HasOne("BookingService.Domain.EventSeats.EventSeat", null)
+                        .WithMany()
+                        .HasForeignKey("EventSeatId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
