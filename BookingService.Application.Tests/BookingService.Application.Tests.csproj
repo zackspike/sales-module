@@ -16,7 +16,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BookingService.Application\BookingService.Application.csproj" />
-    <ProjectReference Include="..\BookingService.Infrastructure\BookingService.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!-- TODO: re-enable when Infrastructure is migrated to EventSeats -->
+  <ItemGroup>
+    <Compile Remove="Infrastructure/**" />
   </ItemGroup>
 
   <ItemGroup>
