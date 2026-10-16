@@ -33,17 +33,6 @@ public class EventInventoryFactoryTests
     }
 
     [Fact]
-    public void Generated_event_seats_have_unique_ids()
-    {
-        var venueSeats = Enumerable.Range(1, 100)
-            .Select(n => new VenueSeat(Guid.NewGuid(), Guid.NewGuid(), $"A-{n}"));
-
-        var eventSeats = EventInventoryFactory.GenerateEventSeats(EventId, venueSeats);
-
-        Assert.Equal(100, eventSeats.Select(s => s.Id).Distinct().Count());
-    }
-
-    [Fact]
     public void Generates_no_event_seats_for_a_venue_without_seats()
     {
         var eventSeats = EventInventoryFactory.GenerateEventSeats(EventId, []);

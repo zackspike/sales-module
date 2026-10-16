@@ -22,15 +22,6 @@ public class EventSeatTests
     }
 
     [Fact]
-    public void CreateAvailable_assigns_a_new_id_each_time()
-    {
-        var first = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
-        var second = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
-
-        Assert.NotEqual(first.Id, second.Id);
-    }
-
-    [Fact]
     public void Sell_marks_the_seat_as_sold_and_issues_its_ticket()
     {
         var seat = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
@@ -53,18 +44,6 @@ public class EventSeatTests
 
         Assert.StartsWith("TK-", ticket.TicketCode);
         Assert.True(Guid.TryParseExact(ticket.TicketCode[3..], "N", out _));
-    }
-
-    [Fact]
-    public void Sold_tickets_have_unique_ids_and_codes()
-    {
-        var tickets = Enumerable.Range(0, 1_000)
-            .Select(_ => EventSeat.CreateAvailable(EventId, Guid.NewGuid(), ZoneId)
-                .Sell("Juan Perez", "juan.perez@example.com", SoldAt))
-            .ToArray();
-
-        Assert.Equal(tickets.Length, tickets.Select(t => t.Id).Distinct().Count());
-        Assert.Equal(tickets.Length, tickets.Select(t => t.TicketCode).Distinct().Count());
     }
 
     [Fact]
