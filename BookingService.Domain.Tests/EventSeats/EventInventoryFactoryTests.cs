@@ -1,7 +1,7 @@
 using BookingService.Domain.EventSeats;
 using BookingService.Domain.Venues;
 
-namespace BookingService.Application.Tests.Domain;
+namespace BookingService.Domain.Tests.EventSeats;
 
 public class EventInventoryFactoryTests
 {

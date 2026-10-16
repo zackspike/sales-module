@@ -1,6 +1,6 @@
 using BookingService.Domain.EventSeats;
 
-namespace BookingService.Application.Tests.Domain;
+namespace BookingService.Domain.Tests.EventSeats;
 
 public class EventSeatTests
 {

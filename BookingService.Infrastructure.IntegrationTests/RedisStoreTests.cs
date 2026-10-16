@@ -3,7 +3,7 @@ using BookingService.Application.Tickets.Dtos;
 using BookingService.Infrastructure.Caching;
 using StackExchange.Redis;
 
-namespace BookingService.Application.Tests.Infrastructure;
+namespace BookingService.Infrastructure.IntegrationTests;
 
 /// <summary>Runs only when ConnectionStrings__Redis points to a Redis instance (CI sets it).</summary>
 public sealed class RedisFactAttribute : FactAttribute

@@ -1,7 +1,7 @@
 using BookingService.Application.Abstractions;
 using BookingService.Infrastructure.Caching;
 
-namespace BookingService.Application.Tests.Infrastructure;
+namespace BookingService.Infrastructure.IntegrationTests;
 
 public class InMemorySeatLockStoreTests
 {

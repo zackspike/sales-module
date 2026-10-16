@@ -5,13 +5,15 @@
 BookingService is a .NET application following Domain-Driven Design
 and Clean Architecture principles.
 
-The solution is divided into four projects plus one test project:
+The solution is divided into four projects plus one xUnit test project per tested layer:
 
 - `BookingService.Api`
 - `BookingService.Application`
 - `BookingService.Domain`
 - `BookingService.Infrastructure` (EF Core + PostgreSQL, migrations in `Migrations/`; Redis seat locks, idempotency and cache)
-- `BookingService.Application.Tests` (xUnit tests for Domain, Application and Infrastructure)
+- `BookingService.Domain.Tests` (references only Domain)
+- `BookingService.Application.Tests` (references only Application)
+- `BookingService.Infrastructure.IntegrationTests` (PostgreSQL/Redis integration tests)
 
 Other relevant paths:
 
