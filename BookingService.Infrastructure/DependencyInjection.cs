@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
-
 namespace BookingService.Infrastructure;
 
 public static class DependencyInjection
@@ -52,16 +51,16 @@ public static class DependencyInjection
 
                 return ConnectionMultiplexer.Connect(options);
             });
-            services.AddSingleton<ISeatLockStore, RedisSeatLockStore>();
+            services.AddSingleton<IEventSeatLockStore, RedisSeatLockStore>();
             services.AddSingleton<IIdempotencyStore, RedisIdempotencyStore>();
-            services.AddSingleton<IAvailableSeatsCache, RedisAvailableSeatsCache>();
+            services.AddSingleton<IAvailableEventSeatsCache, RedisAvailableSeatsCache>();
         }
         else
         {
-            services.AddSingleton<ISeatLockStore>(_ => new InMemorySeatLockStore());
+            services.AddSingleton<IEventSeatLockStore>(_ => new InMemorySeatLockStore());
             services.AddSingleton<NoCache>();
             services.AddSingleton<IIdempotencyStore>(sp => sp.GetRequiredService<NoCache>());
-            services.AddSingleton<IAvailableSeatsCache>(sp => sp.GetRequiredService<NoCache>());
+            services.AddSingleton<IAvailableEventSeatsCache>(sp => sp.GetRequiredService<NoCache>());
         }
 
         return services;
