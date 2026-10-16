@@ -1,8 +1,7 @@
 namespace BookingService.Domain.Common;
 
 /// <summary>
-/// Base type for violations of a business rule. <see cref="Code"/> is a stable,
-/// machine-readable identifier (e.g. <c>TICKET_ALREADY_SOLD</c>).
+/// Base class for domain exceptions in the booking domain. All domain-specific exceptions should inherit from this class.
 /// </summary>
 public abstract class DomainException : Exception
 {
