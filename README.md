@@ -25,7 +25,7 @@ booking-service/
 ├── BookingService.Infrastructure/ # EF Core + PostgreSQL persistence, migrations (incl. seed data), Redis seat locks/cache, in-memory fallback
 ├── BookingService.Domain.Tests/   # xUnit unit tests for Domain
 ├── BookingService.Application.Tests/ # xUnit unit tests for Application use cases
-├── BookingService.Infrastructure.IntegrationTests/ # PostgreSQL/Redis integration tests (run when configured)
+├── BookingService.Infrastructure.Tests/ # xUnit tests for Infrastructure (PostgreSQL/Redis ones run when configured)
 ├── docker-compose.yml             # Local PostgreSQL and Redis dependencies
 ├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
 ├── .agents/                       # Agent workflows, specifications (Notion), and MCP integrations

@@ -5,7 +5,7 @@ using BookingService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace BookingService.Infrastructure.IntegrationTests;
+namespace BookingService.Infrastructure.Tests;
 
 /// <summary>Runs only when ConnectionStrings__DefaultConnection points to a PostgreSQL instance (CI sets it).</summary>
 public sealed class PostgresFactAttribute : FactAttribute

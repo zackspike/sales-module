@@ -13,7 +13,7 @@ The solution is divided into four projects plus one xUnit test project per teste
 - `BookingService.Infrastructure` (EF Core + PostgreSQL, migrations in `Migrations/`; Redis seat locks, idempotency and cache)
 - `BookingService.Domain.Tests` (references only Domain)
 - `BookingService.Application.Tests` (references only Application)
-- `BookingService.Infrastructure.IntegrationTests` (PostgreSQL/Redis integration tests)
+- `BookingService.Infrastructure.Tests` (references Infrastructure; includes PostgreSQL/Redis integration tests)
 
 Other relevant paths:
 
