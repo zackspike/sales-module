@@ -24,10 +24,20 @@ public class TicketHolderValidatorTests
     }
 
     [Fact]
-    public void Full_name_length_is_checked_after_trim()
+    public void Full_name_at_limit_is_valid()
     {
         Assert.Empty(TicketHolderValidator.Validate(new string('a', 64), "jane@example.com"));
+    }
+
+    [Fact]
+    public void Full_name_length_is_measured_after_trim()
+    {
         Assert.Empty(TicketHolderValidator.Validate($"  {new string('a', 64)}  ", "jane@example.com"));
+    }
+
+    [Fact]
+    public void Full_name_over_limit_is_invalid()
+    {
         Assert.Contains("fullName", TicketHolderValidator.Validate(new string('a', 65), "jane@example.com").Keys);
     }
 
@@ -47,15 +57,17 @@ public class TicketHolderValidatorTests
     }
 
     [Fact]
-    public void Email_is_trimmed_and_254_characters_can_be_valid()
+    public void Email_at_254_characters_is_valid_after_trim()
     {
-        var localPart = new string('a', 64);
-        var domain = $"{new string('b', 63)}.{new string('b', 63)}.{new string('b', 57)}.com";
-        var email = $"{localPart}@{domain}";
-
+        var email = MaxLengthEmail();
         Assert.Equal(254, email.Length);
         Assert.Empty(TicketHolderValidator.Validate("Jane Doe", $"  {email}  "));
-        Assert.Contains("email", TicketHolderValidator.Validate("Jane Doe", $"a{email}").Keys);
+    }
+
+    [Fact]
+    public void Email_over_254_characters_is_invalid()
+    {
+        Assert.Contains("email", TicketHolderValidator.Validate("Jane Doe", $"a{MaxLengthEmail()}").Keys);
     }
 
     [Fact]
@@ -65,5 +77,12 @@ public class TicketHolderValidatorTests
 
         Assert.Contains("fullName", errors.Keys);
         Assert.Contains("email", errors.Keys);
+    }
+
+    private static string MaxLengthEmail()
+    {
+        var localPart = new string('a', 64);
+        var domain = $"{new string('b', 63)}.{new string('b', 63)}.{new string('b', 57)}.com";
+        return $"{localPart}@{domain}";
     }
 }
