@@ -1,5 +1,5 @@
-using BookingService.Domain.EventSeats;
 using BookingService.Domain.Events;
+using BookingService.Domain.EventSeats;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

@@ -66,7 +66,8 @@ public sealed class InMemoryEventSeatRepository : IEventSeatRepository
                 return null;
             }
 
-            if (!_ticketsById.TryGetValue(ticketId, out var ticket))
+            // A key used for another seat did not buy this one.
+            if (!_ticketsById.TryGetValue(ticketId, out var ticket) || ticket.EventSeatId != eventSeatId)
             {
                 return null;
             }
