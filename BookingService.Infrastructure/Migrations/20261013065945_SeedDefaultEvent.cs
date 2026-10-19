@@ -35,6 +35,11 @@ public partial class SeedDefaultEvent : Migration
     protected override void Down(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.Sql("""
+            DELETE FROM tickets
+            WHERE "EventSeatId" IN (
+                SELECT "Id" FROM event_seats
+                WHERE "EventId" = '11111111-1111-1111-1111-111111111111'
+            );
             DELETE FROM event_seats WHERE "EventId" = '11111111-1111-1111-1111-111111111111';
             DELETE FROM events WHERE "Id" = '11111111-1111-1111-1111-111111111111';
             """);
