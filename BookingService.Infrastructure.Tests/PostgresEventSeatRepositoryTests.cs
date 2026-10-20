@@ -1,5 +1,6 @@
-using BookingService.Application.Tickets.Commands;
+using BookingService.Application.EventSeats.Commands;
 using BookingService.Domain.Events;
+using BookingService.Domain.EventSeats;
 using BookingService.Infrastructure.Caching;
 using BookingService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,7 @@ public sealed class PostgresFactAttribute : FactAttribute
     }
 }
 
-public class PostgresTicketRepositoryTests
+public class PostgresEventSeatRepositoryTests
 {
     private static readonly Lazy<DbContextOptions<BookingDbContext>> Options = new(() =>
     {
@@ -40,10 +41,10 @@ public class PostgresTicketRepositoryTests
     {
         var (eventId, seats) = SeedEvent(1);
 
-        var results = Race(20, _ => new(eventId, seats[0], "Juan Perez", "juan.perez@example.com", Guid.NewGuid()));
+        var results = Race(20, _ => new PurchaseEventSeatCommand(eventId, seats[0], "Juan Perez", "juan.perez@example.com", Guid.NewGuid()));
 
-        Assert.Single(results, s => s == PurchaseTicketStatus.Purchased);
-        Assert.Equal(19, results.Count(s => s == PurchaseTicketStatus.AlreadySold));
+        Assert.Single(results, s => s == PurchaseEventSeatStatus.Purchased);
+        Assert.Equal(19, results.Count(s => s == PurchaseEventSeatStatus.AlreadySold));
     }
 
     [PostgresFact]
@@ -52,10 +53,10 @@ public class PostgresTicketRepositoryTests
         var (eventId, seats) = SeedEvent(1);
         var key = Guid.NewGuid();
 
-        var results = Race(10, _ => new(eventId, seats[0], "Juan Perez", "juan.perez@example.com", key));
+        var results = Race(10, _ => new PurchaseEventSeatCommand(eventId, seats[0], "Juan Perez", "juan.perez@example.com", key));
 
-        Assert.Single(results, s => s == PurchaseTicketStatus.Purchased);
-        Assert.Equal(9, results.Count(s => s == PurchaseTicketStatus.Replayed));
+        Assert.Single(results, s => s == PurchaseEventSeatStatus.Purchased);
+        Assert.Equal(9, results.Count(s => s == PurchaseEventSeatStatus.Replayed));
     }
 
     [PostgresFact]
@@ -64,32 +65,33 @@ public class PostgresTicketRepositoryTests
         var (eventId, seats) = SeedEvent(2);
         var key = Guid.NewGuid();
 
-        var results = Race(2, i => new(eventId, seats[i], "Juan Perez", "juan.perez@example.com", key));
+        var results = Race(2, i => new PurchaseEventSeatCommand(eventId, seats[i], "Juan Perez", "juan.perez@example.com", key));
 
-        Assert.Single(results, s => s == PurchaseTicketStatus.Purchased);
-        Assert.Single(results, s => s == PurchaseTicketStatus.IdempotencyKeyConflict);
+        Assert.Single(results, s => s == PurchaseEventSeatStatus.Purchased);
+        Assert.Single(results, s => s == PurchaseEventSeatStatus.IdempotencyKeyConflict);
     }
 
     // Every buyer uses the same email, so all of them hold the seat lock and the database decides.
-    private static PurchaseTicketStatus[] Race(int buyers, Func<int, PurchaseTicketCommand> command)
+    private static PurchaseEventSeatStatus[] Race(int buyers, Func<int, PurchaseEventSeatCommand> command)
     {
-        var results = new PurchaseTicketStatus[buyers];
+        var results = new PurchaseEventSeatStatus[buyers];
         var locks = new InMemorySeatLockStore();
         for (var i = 0; i < buyers; i++)
         {
-            locks.TryAcquire(command(i).TicketId, "juan.perez@example.com", TimeSpan.FromMinutes(10));
+            locks.TryAcquire(command(i).EventSeatId, "juan.perez@example.com", TimeSpan.FromMinutes(10));
         }
 
         Parallel.For(0, buyers, new ParallelOptions { MaxDegreeOfParallelism = buyers }, index =>
         {
             using var db = new BookingDbContext(Options.Value);
-            var handler = new PurchaseTicketHandler(
-                new TicketPurchaseValidator(new PostgresEventCatalog(db)),
-                new PostgresTicketRepository(db),
+            var handler = new PurchaseEventSeatHandler(
+                new PostgresEventCatalog(db),
+                new PostgresEventSeatRepository(db),
+                new InMemoryVenueSeatCatalog(),
                 locks,
                 new NoCache(),
                 new NoCache(),
-                NullLogger<PurchaseTicketHandler>.Instance);
+                NullLogger<PurchaseEventSeatHandler>.Instance);
             results[index] = handler.Handle(command(index)).Status;
         });
 
@@ -98,14 +100,25 @@ public class PostgresTicketRepositoryTests
 
     private static (Guid EventId, Guid[] Seats) SeedEvent(int totalSeats)
     {
-        var @event = new Event { Id = Guid.NewGuid(), Name = "Race test", Date = DateTime.UtcNow, TotalSeats = totalSeats };
-        var tickets = EventInventoryFactory.CreateInitialInventory(@event);
+        var @event = new Event(
+            Guid.NewGuid(),
+            "Race test",
+            Guid.NewGuid(),
+            "Test Artist",
+            Guid.NewGuid(),
+            "Test Venue",
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddDays(-1),
+            DateTime.UtcNow.AddDays(1));
+
+        var venueSeats = InMemoryVenueSeatCatalog.DefaultVenueSeats.Take(totalSeats).ToList();
+        var eventSeats = EventInventoryFactory.GenerateEventSeats(@event.Id, venueSeats);
 
         using var db = new BookingDbContext(Options.Value);
         db.Events.Add(@event);
-        db.Tickets.AddRange(tickets);
+        db.EventSeats.AddRange(eventSeats);
         db.SaveChanges();
 
-        return (@event.Id, tickets.Select(t => t.Id).ToArray());
+        return (@event.Id, eventSeats.Select(s => s.Id).ToArray());
     }
 }

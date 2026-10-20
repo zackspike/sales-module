@@ -18,11 +18,6 @@
     <ProjectReference Include="..\BookingService.Infrastructure\BookingService.Infrastructure.csproj" />
   </ItemGroup>
 
-  <!-- TODO: re-enable when Infrastructure is migrated to EventSeats -->
-  <ItemGroup>
-    <Compile Remove="*Tests.cs" />
-  </ItemGroup>
-
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>

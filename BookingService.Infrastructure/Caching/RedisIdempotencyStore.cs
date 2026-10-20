@@ -37,9 +37,7 @@ public sealed class RedisIdempotencyStore : IIdempotencyStore
         }
     }
 
-    /// <summary>
-    /// Backwards-compatible alias for <see cref="GetIdempotencyRecord"/>.
-    /// </summary>
+
     public IdempotencyRecord? Get(Guid idempotencyKey) => GetIdempotencyRecord(idempotencyKey);
 
     public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention)
