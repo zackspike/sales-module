@@ -1,0 +1,14 @@
+{
+  "name": "GET /api/v1/events",
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/v1/events"
+  },
+  "response": {
+    "status": 200,
+    "bodyFileName": "event-management-api/get-events-success.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

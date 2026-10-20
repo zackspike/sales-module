@@ -1,7 +1,7 @@
 using BookingService.Domain.Tickets;
 using BookingService.Infrastructure.Persistence;
 
-namespace BookingService.Application.Tests.Infrastructure;
+namespace BookingService.Infrastructure.Tests;
 
 public class InMemoryTicketRepositoryTests
 {

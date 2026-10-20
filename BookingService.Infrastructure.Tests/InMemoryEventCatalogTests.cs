@@ -1,7 +1,7 @@
 using BookingService.Domain.Events;
 using BookingService.Infrastructure.Persistence;
 
-namespace BookingService.Application.Tests.Infrastructure;
+namespace BookingService.Infrastructure.Tests;
 
 public class InMemoryEventCatalogTests
 {
