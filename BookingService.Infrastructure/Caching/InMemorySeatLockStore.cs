@@ -43,9 +43,7 @@ public sealed class InMemorySeatLockStore : IEventSeatLockStore
         }
     }
 
-    /// <summary>
-    /// Backwards-compatible alias for <see cref="GetHolderIdentifier"/>.
-    /// </summary>
+
     public string? GetHolder(Guid eventSeatId) => GetHolderIdentifier(eventSeatId);
 
     public IReadOnlySet<Guid> GetLockedEventSeatIds(IReadOnlyCollection<Guid> eventSeatIds)
@@ -63,9 +61,7 @@ public sealed class InMemorySeatLockStore : IEventSeatLockStore
         }
     }
 
-    /// <summary>
-    /// Backwards-compatible alias for <see cref="GetLockedEventSeatIds"/>.
-    /// </summary>
+
     public IReadOnlySet<Guid> GetLockedTicketIds(IReadOnlyCollection<Guid> eventSeatIds) => GetLockedEventSeatIds(eventSeatIds);
 
     public bool Release(Guid eventSeatId, string holderIdentifier)
