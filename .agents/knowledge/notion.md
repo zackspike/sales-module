@@ -178,6 +178,17 @@ The refactor advances one layer at a time: Domain → Application → Infrastruc
   * `POST /events/{eventId}/tickets/{ticketId}/purchase` — purchase (`X-Idempotency-Key` header).
   * The HTTP request/response shape (e.g., MVP-02 `purchasedAtUtc` vs. `IssuedTicket.SoldAtUtc`) is defined when the Api is migrated.
 
+### Pending decision — integration with EventService and VenueService
+Domain and Application treat `Event` (EventService) and `VenueSeat` / `SeatZone` (VenueService) the same way: read-only data reached through `IEventCatalog` and `IVenueSeatCatalog`. The PostgreSQL infrastructure does not:
+* `Event` has a local copy: `events` table, `PostgresEventCatalog`, and a FK from `event_seats.EventId`.
+* `VenueSeat` has no persistence; `SeatZone` is not used. `event_seats.VenueSeatId` and `event_seats.ZoneId` are plain id references (no FK).
+
+This difference is not a design decision: the integration strategy is still open. The in-memory implementations are mocks for local testing only and are not part of it. Options:
+* **Local replica of both:** tables for `VenueSeat` (and zones once they are used), PostgreSQL catalogs, and a synchronization mechanism from the owning services. Reserve and purchase do not depend on those services being available, and FKs/joins are possible. `VenueSeat` is on the hot paths (seat number when listing, reserving and purchasing), so it benefits from a local copy more than `Event` (only `Exists`).
+* **Remote lookup of both:** drop the `events` table and its FK (`EventSeat.EventId` becomes a plain id reference, like `VenueSeatId`), and implement both catalogs as clients of the owning services, possibly cached. No duplicated data, but every request depends on those services.
+
+Decide before regenerating the initial migration: either option changes the schema.
+
 Task statuses are tracked in the Notion tasks database, not in this file.
 
 ---
