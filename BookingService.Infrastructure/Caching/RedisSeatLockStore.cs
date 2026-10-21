@@ -65,8 +65,6 @@ public sealed class RedisSeatLockStore : IEventSeatLockStore
         return holder.HasValue ? holder.ToString() : null;
     }
 
-    public string? GetHolder(Guid eventSeatId) => GetHolderIdentifier(eventSeatId);
-
     public IReadOnlySet<Guid> GetLockedEventSeatIds(IReadOnlyCollection<Guid> eventSeatIds)
     {
         ArgumentNullException.ThrowIfNull(eventSeatIds);
@@ -81,9 +79,6 @@ public sealed class RedisSeatLockStore : IEventSeatLockStore
 
         return ids.Where((_, i) => holders[i].HasValue).ToHashSet();
     }
-
-
-    public IReadOnlySet<Guid> GetLockedTicketIds(IReadOnlyCollection<Guid> eventSeatIds) => GetLockedEventSeatIds(eventSeatIds);
 
     public bool Release(Guid eventSeatId, string holderIdentifier)
     {

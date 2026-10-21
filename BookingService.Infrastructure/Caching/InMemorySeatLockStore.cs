@@ -43,9 +43,6 @@ public sealed class InMemorySeatLockStore : IEventSeatLockStore
         }
     }
 
-
-    public string? GetHolder(Guid eventSeatId) => GetHolderIdentifier(eventSeatId);
-
     public IReadOnlySet<Guid> GetLockedEventSeatIds(IReadOnlyCollection<Guid> eventSeatIds)
     {
         ArgumentNullException.ThrowIfNull(eventSeatIds);
@@ -60,9 +57,6 @@ public sealed class InMemorySeatLockStore : IEventSeatLockStore
             return eventSeatIds.Where(id => CurrentHolder(id) is not null).ToHashSet();
         }
     }
-
-
-    public IReadOnlySet<Guid> GetLockedTicketIds(IReadOnlyCollection<Guid> eventSeatIds) => GetLockedEventSeatIds(eventSeatIds);
 
     public bool Release(Guid eventSeatId, string holderIdentifier)
     {
