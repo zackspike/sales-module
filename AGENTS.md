@@ -187,17 +187,33 @@ Do not modify files outside the requested scope unless explicitly required.
 Before changing architecture, inspect the existing solution and project
 references.
 
-### Source of Architectural Knowledge
+### Design Decisions
 
-Additional project knowledge may be available in:
+Decisions the code alone does not explain. Record rules and their reasons here,
+not descriptions of the current code (class lists, routes, migration progress):
+`BookingService.Domain` and `BookingService.Application` are the source of truth
+for the business model and use cases.
 
-.agents/knowledge/notion.md
+- **Scope:** an unauthenticated fan picks an available seat of an event, reserves it
+  and purchases it. Out of scope: authentication, real payment gateway, sections
+  and pricing calculations. Event search belongs to SearchService, not this service.
+- **Seat choice:** the fan always chooses the seat; the backend never assigns one.
+- **Data ownership:** `Event` belongs to EventService and `VenueSeat`/`SeatZone` to
+  VenueService. BookingService only reads them through `IEventCatalog` and
+  `IVenueSeatCatalog`. In-memory catalogs are local test mocks, not an integration.
+- **Layer-by-layer refactor:** changes advance Domain → Application → Infrastructure
+  → Api. The Api keeps the MVP-02 routes (`ticketId` in the route is the event seat
+  id) until it is migrated; do not migrate it as a side effect of other work.
+- **Open — EventService/VenueService integration:** PostgreSQL keeps a local `events`
+  table (FK from `event_seats.EventId`) but no `VenueSeat` table (`VenueSeatId` and
+  `ZoneId` are plain ids). This asymmetry is not a decision. Options:
+  - Local replica of both, synchronized from the owning services: reserve/purchase
+    do not depend on them being up, and FKs/joins are possible. `VenueSeat` is on
+    the hot paths, so it benefits most.
+  - Remote lookup of both (possibly cached): drop the `events` table and its FK; no
+    duplicated data, but every request depends on those services.
 
-When the Notion source is configured, use it as project-specific
-documentation and architectural context.
-
-Repository code and explicit user instructions take precedence over
-general recommendations from the Notion documentation.
+  Decide before regenerating the initial migration: either option changes the schema.
 
 ### Workflow Protocol
 
@@ -205,7 +221,7 @@ When executing tasks or user requests, agents must follow the structured lifecyc
 
 1. **Analysis & Planning Phase**:
    - Save the incoming task description to `.agents/current/request.md`.
-   - Inspect domain requirements, architecture, and `.agents/knowledge/notion.md`.
+   - Inspect domain requirements, architecture, and the Design Decisions above.
    - Formulate the minimal implementation plan in `.agents/current/plan.md` and task instructions in `.agents/current/editor-task.md`.
    - Do not modify source code during this phase.
 
