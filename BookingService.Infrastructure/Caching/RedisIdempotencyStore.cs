@@ -37,9 +37,6 @@ public sealed class RedisIdempotencyStore : IIdempotencyStore
         }
     }
 
-
-    public IdempotencyRecord? Get(Guid idempotencyKey) => GetIdempotencyRecord(idempotencyKey);
-
     public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention)
     {
         ArgumentNullException.ThrowIfNull(record);
