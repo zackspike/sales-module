@@ -76,13 +76,13 @@ Application -> Infrastructure
 
 unless the architecture is explicitly changed by the user.
 
-## Notion Knowledge
-If .agents/knowledge/notion.md exists, inspect it when the request
+## Design Decisions
+Inspect the Design Decisions section of AGENTS.md when the request
 depends on project-specific architectural or business information.
 
 Treat it as a source of project context, not as permission to expand scope.
 
-If the Notion documentation conflicts with explicit user instructions,
+If it conflicts with explicit user instructions,
 the user's instructions take precedence.
 
 ## Plan Construction
