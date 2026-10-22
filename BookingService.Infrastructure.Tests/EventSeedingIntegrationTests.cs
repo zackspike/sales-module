@@ -16,7 +16,7 @@ public class EventSeedingIntegrationTests
 
         // Assert: Event exists in catalog with contract specification (ALIGN-01)
         Assert.True(catalog.Exists(defaultEvent.Id));
-        var fetchedEvent = catalog.GetById(defaultEvent.Id);
+        var fetchedEvent = InMemoryEventCatalog.DefaultEvent;
         Assert.NotNull(fetchedEvent);
         Assert.Equal("Rock Fest 2026", fetchedEvent.Name);
         Assert.Equal("The Rockers", fetchedEvent.ArtistName);

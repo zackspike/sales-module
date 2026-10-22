@@ -29,14 +29,4 @@ public class InMemoryEventCatalog : IEventCatalog
     }
 
     public bool Exists(Guid eventId) => _events.ContainsKey(eventId);
-
-    public Event? GetById(Guid eventId) => _events.TryGetValue(eventId, out var @event) ? @event : null;
-
-    public IReadOnlyCollection<Event> GetAll() => _events.Values.ToList();
-
-    public void Add(Event @event)
-    {
-        ArgumentNullException.ThrowIfNull(@event);
-        _events[@event.Id] = @event;
-    }
 }
