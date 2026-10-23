@@ -8,35 +8,18 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BookingService.Infrastructure.Tests;
 
-/// <summary>Runs only when ConnectionStrings__DefaultConnection points to a PostgreSQL instance (CI sets it).</summary>
-public sealed class PostgresFactAttribute : FactAttribute
+[Collection(PostgresCollection.Name)]
+public sealed class PostgresEventSeatRepositoryTests : IDisposable
 {
-    public static readonly string? ConnectionString =
-        Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+    private readonly DbContextOptions<BookingDbContext> _options;
+    private readonly List<Guid> _seededEventIds = [];
 
-    public PostgresFactAttribute()
+    public PostgresEventSeatRepositoryTests(PostgresFixture postgres)
     {
-        if (string.IsNullOrWhiteSpace(ConnectionString))
-        {
-            Skip = "Set ConnectionStrings__DefaultConnection to run PostgreSQL tests.";
-        }
+        _options = postgres.Options;
     }
-}
 
-public class PostgresEventSeatRepositoryTests
-{
-    private static readonly Lazy<DbContextOptions<BookingDbContext>> Options = new(() =>
-    {
-        var options = new DbContextOptionsBuilder<BookingDbContext>()
-            .UseNpgsql(PostgresFactAttribute.ConnectionString)
-            .Options;
-
-        using var db = new BookingDbContext(options);
-        db.Database.Migrate();
-        return options;
-    });
-
-    [PostgresFact]
+    [Fact]
     public void Concurrent_buyers_of_the_same_seat_sell_it_once()
     {
         var (eventId, seats) = SeedEvent(1);
@@ -47,7 +30,7 @@ public class PostgresEventSeatRepositoryTests
         Assert.Equal(19, results.Count(s => s == PurchaseEventSeatStatus.AlreadySold));
     }
 
-    [PostgresFact]
+    [Fact]
     public void Concurrent_retries_with_the_same_key_replay_the_purchase()
     {
         var (eventId, seats) = SeedEvent(1);
@@ -59,7 +42,7 @@ public class PostgresEventSeatRepositoryTests
         Assert.Equal(9, results.Count(s => s == PurchaseEventSeatStatus.Replayed));
     }
 
-    [PostgresFact]
+    [Fact]
     public void Same_key_racing_on_two_seats_is_a_conflict()
     {
         var (eventId, seats) = SeedEvent(2);
@@ -72,7 +55,7 @@ public class PostgresEventSeatRepositoryTests
     }
 
     // Every buyer uses the same email, so all of them hold the seat lock and the database decides.
-    private static PurchaseEventSeatStatus[] Race(int buyers, Func<int, PurchaseEventSeatCommand> command)
+    private PurchaseEventSeatStatus[] Race(int buyers, Func<int, PurchaseEventSeatCommand> command)
     {
         var results = new PurchaseEventSeatStatus[buyers];
         var locks = new InMemorySeatLockStore();
@@ -83,7 +66,7 @@ public class PostgresEventSeatRepositoryTests
 
         Parallel.For(0, buyers, new ParallelOptions { MaxDegreeOfParallelism = buyers }, index =>
         {
-            using var db = new BookingDbContext(Options.Value);
+            using var db = new BookingDbContext(_options);
             var handler = new PurchaseEventSeatHandler(
                 new PostgresEventCatalog(db),
                 new PostgresEventSeatRepository(db),
@@ -98,7 +81,7 @@ public class PostgresEventSeatRepositoryTests
         return results;
     }
 
-    private static (Guid EventId, Guid[] Seats) SeedEvent(int totalSeats)
+    private (Guid EventId, Guid[] Seats) SeedEvent(int totalSeats)
     {
         var @event = new Event(
             Guid.NewGuid(),
@@ -114,11 +97,23 @@ public class PostgresEventSeatRepositoryTests
         var venueSeats = InMemoryVenueSeatCatalog.DefaultVenueSeats.Take(totalSeats).ToList();
         var eventSeats = EventInventoryFactory.GenerateEventSeats(@event.Id, venueSeats);
 
-        using var db = new BookingDbContext(Options.Value);
+        using var db = new BookingDbContext(_options);
         db.Events.Add(@event);
         db.EventSeats.AddRange(eventSeats);
         db.SaveChanges();
+        _seededEventIds.Add(@event.Id);
 
         return (@event.Id, eventSeats.Select(s => s.Id).ToArray());
+    }
+
+    // Removes only the rows this test created, children first because the foreign keys are Restrict.
+    public void Dispose()
+    {
+        using var db = new BookingDbContext(_options);
+        db.Tickets
+            .Where(t => db.EventSeats.Any(s => s.Id == t.EventSeatId && _seededEventIds.Contains(s.EventId)))
+            .ExecuteDelete();
+        db.EventSeats.Where(s => _seededEventIds.Contains(s.EventId)).ExecuteDelete();
+        db.Events.Where(e => _seededEventIds.Contains(e.Id)).ExecuteDelete();
     }
 }

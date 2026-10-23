@@ -2,12 +2,14 @@ using BookingService.Application.Abstractions;
 using BookingService.Domain.EventSeats;
 using BookingService.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace BookingService.Infrastructure.Persistence;
 
 public sealed class PostgresEventSeatRepository : IEventSeatRepository
 {
     internal const string IdempotencyKeyPropertyName = "IdempotencyKey";
+    private const string EventSeatSoldIndexName = "IX_tickets_EventSeatId";
 
     private readonly BookingDbContext _dbContext;
 
@@ -75,7 +77,16 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
             return new EventSeatSaleOutcome(null, Replayed: false);
         }
 
-        var ticket = sell(seat);
+        Ticket ticket;
+        try
+        {
+            ticket = sell(seat);
+        }
+        catch (EventSeatAlreadySoldException)
+        {
+            // Another buyer committed between the idempotency key lookup and the seat read.
+            return ReplayOrAlreadySold(idempotencyKey, eventSeatId);
+        }
 
         if (idempotencyKey != Guid.Empty)
         {
@@ -86,21 +97,16 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
         try
         {
             // xmin token: 0 rows updated if another buyer sold the seat first.
+            // Unique index on EventSeatId: another buyer's ticket for this seat was committed first.
             // Unique index on IdempotencyKey: the same key won a race on another seat.
             _dbContext.SaveChanges();
         }
         catch (DbUpdateConcurrencyException)
         {
             _dbContext.ChangeTracker.Clear();
-            var winner = FindTicketByKey(idempotencyKey, asNoTracking: true);
-            if (winner is not null)
-            {
-                return new EventSeatSaleOutcome(LoadSale(winner), Replayed: true);
-            }
-
-            throw new EventSeatAlreadySoldException(eventSeatId);
+            return ReplayOrAlreadySold(idempotencyKey, eventSeatId);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception)
         {
             _dbContext.ChangeTracker.Clear();
             var winner = FindTicketByKey(idempotencyKey, asNoTracking: true);
@@ -109,10 +115,30 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
                 return new EventSeatSaleOutcome(LoadSale(winner), Replayed: true);
             }
 
+            if (exception.InnerException is PostgresException
+                {
+                    SqlState: PostgresErrorCodes.UniqueViolation,
+                    ConstraintName: EventSeatSoldIndexName,
+                })
+            {
+                throw new EventSeatAlreadySoldException(eventSeatId);
+            }
+
             throw;
         }
 
         return new EventSeatSaleOutcome(new EventSeatSale(seat, ticket), Replayed: false);
+    }
+
+    private EventSeatSaleOutcome ReplayOrAlreadySold(Guid idempotencyKey, Guid eventSeatId)
+    {
+        var winner = FindTicketByKey(idempotencyKey, asNoTracking: true);
+        if (winner is not null)
+        {
+            return new EventSeatSaleOutcome(LoadSale(winner), Replayed: true);
+        }
+
+        throw new EventSeatAlreadySoldException(eventSeatId);
     }
 
     private Ticket? FindTicketByKey(Guid idempotencyKey, bool asNoTracking)

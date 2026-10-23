@@ -36,8 +36,9 @@ Requires the .NET 10 SDK and Docker.
 | Add a migration | `dotnet ef migrations add <Name> --project BookingService.Infrastructure --startup-project BookingService.Api` |
 | Run API | `dotnet run --project BookingService.Api` |
 
-PostgreSQL integration tests are skipped unless `ConnectionStrings__DefaultConnection` is set,
-and Redis integration tests unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
+PostgreSQL integration tests require Docker: `PostgresFixture` starts a disposable container with
+Testcontainers, migrates it and removes it afterwards; they never use `ConnectionStrings__DefaultConnection`.
+Redis integration tests are skipped unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
 Seed data lives in the `SeedDefaultEvent` migration, not in application code.
 
 ## Architecture
