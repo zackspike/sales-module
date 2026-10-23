@@ -12,18 +12,22 @@ public interface IEventSeatRepository
     /// <summary>
     /// Returns all event seats of event <paramref name="eventId"/>; empty if the event has none.
     /// </summary>
-    IReadOnlyCollection<EventSeat> GetByEvent(Guid eventId);
+    Task<IReadOnlyCollection<EventSeat>> GetByEventAsync(Guid eventId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Returns event seat <paramref name="eventSeatId"/> only if it belongs to event <paramref name="eventId"/>.
     /// </summary>
-    EventSeat? GetById(Guid eventId, Guid eventSeatId);
+    Task<EventSeat?> GetByIdAsync(Guid eventId, Guid eventSeatId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Returns the sale made with <paramref name="idempotencyKey"/> on seat <paramref name="eventSeatId"/> of event
     /// <paramref name="eventId"/>, or null if that key did not buy that seat (never used, or used for another seat).
     /// </summary>
-    EventSeatSale? GetSaleByIdempotencyKey(Guid idempotencyKey, Guid eventId, Guid eventSeatId);
+    Task<EventSeatSale?> GetSaleByIdempotencyKeyAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Runs <paramref name="sell"/> on seat <paramref name="eventSeatId"/> of event <paramref name="eventId"/>
@@ -35,7 +39,12 @@ public interface IEventSeatRepository
     /// <exception cref="EventSeatAlreadySoldException">
     /// <paramref name="sell"/> found the seat already sold. Nothing is stored and the exception propagates.
     /// </exception>
-    EventSeatSaleOutcome SellOnce(Guid idempotencyKey, Guid eventId, Guid eventSeatId, Func<EventSeat, Ticket> sell);
+    Task<EventSeatSaleOutcome> SellOnceAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        Func<EventSeat, Ticket> sell,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -44,7 +53,7 @@ public interface IEventSeatRepository
 public sealed record EventSeatSale(EventSeat Seat, Ticket Ticket);
 
 /// <summary>
-/// Result of <see cref="IEventSeatRepository.SellOnce"/>. <see cref="Sale"/> is null when the seat does not
+/// Result of <see cref="IEventSeatRepository.SellOnceAsync"/>. <see cref="Sale"/> is null when the seat does not
 /// exist in the event. When the key was already used, <see cref="Replayed"/> is true and <see cref="Sale"/>
 /// is the sale made with it (which may be a different seat).
 /// </summary>

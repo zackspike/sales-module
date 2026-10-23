@@ -35,32 +35,37 @@ public sealed class GetAvailableEventSeatsHandler
     /// <summary>
     /// Returns the available event seats of the event sorted by seat number, or null if the event does not exist.
     /// </summary>
-    public IReadOnlyList<AvailableEventSeat>? Handle(GetAvailableEventSeatsQuery query)
+    public async Task<IReadOnlyList<AvailableEventSeat>?> HandleAsync(
+        GetAvailableEventSeatsQuery query,
+        CancellationToken cancellationToken)
     {
         // Only existing events are cached, so a hit skips the event check too.
-        var eventSeats = _availableEventSeatsCache.Get(query.EventId);
+        var eventSeats = await _availableEventSeatsCache.GetAsync(query.EventId, cancellationToken);
         if (eventSeats is null)
         {
-            if (!_eventCatalog.Exists(query.EventId))
+            if (!await _eventCatalog.ExistsAsync(query.EventId, cancellationToken))
             {
                 return null;
             }
 
-            var available = _eventSeatRepository.GetByEvent(query.EventId)
+            var available = (await _eventSeatRepository.GetByEventAsync(query.EventId, cancellationToken))
                 .Where(avs => avs.Status == EventSeatStatus.Available)
                 .ToList();
 
             var venueSeatIds = available.Select(avs => avs.VenueSeatId).ToList();
-            var venueSeats = _venueSeatCatalog.GetByIds(venueSeatIds).ToDictionary(vs => vs.Id);
+            var venueSeats = (await _venueSeatCatalog.GetByIdsAsync(venueSeatIds, cancellationToken))
+                .ToDictionary(vs => vs.Id);
 
             eventSeats = available
                 .Select(avs => new AvailableEventSeat(avs.Id, SeatNumberOf(avs, venueSeats)))
                 .OrderBy(avs => avs.SeatNumber, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            _availableEventSeatsCache.Set(query.EventId, eventSeats);
+            await _availableEventSeatsCache.SetAsync(query.EventId, eventSeats, cancellationToken);
         }
 
-        var reserved = _eventSeatLocks.GetLockedEventSeatIds(eventSeats.Select(s => s.EventSeatId).ToList());
+        var reserved = await _eventSeatLocks.GetLockedEventSeatIdsAsync(
+            eventSeats.Select(s => s.EventSeatId).ToList(),
+            cancellationToken);
 
         return eventSeats.Where(s => !reserved.Contains(s.EventSeatId)).ToList();
     }

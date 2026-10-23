@@ -31,28 +31,31 @@ public sealed class GetEventSeatAvailabilityHandler
     /// <summary>
     /// Returns the availability information for the seat, or null if the event or event seat is not found.
     /// </summary>
-    public EventSeatAvailability? Handle(GetEventSeatAvailabilityQuery query)
+    public async Task<EventSeatAvailability?> HandleAsync(
+        GetEventSeatAvailabilityQuery query,
+        CancellationToken cancellationToken)
     {
-        if (!_eventCatalog.Exists(query.EventId))
+        if (!await _eventCatalog.ExistsAsync(query.EventId, cancellationToken))
         {
             return null;
         }
 
-        var eventSeat = _eventSeatRepository.GetById(query.EventId, query.EventSeatId);
+        var eventSeat = await _eventSeatRepository.GetByIdAsync(query.EventId, query.EventSeatId, cancellationToken);
         if (eventSeat is null)
         {
             return null;
         }
 
-        var venueSeat = _venueSeatCatalog.GetById(eventSeat.VenueSeatId)
+        var venueSeat = await _venueSeatCatalog.GetByIdAsync(eventSeat.VenueSeatId, cancellationToken)
             ?? throw new InvalidOperationException(
                 $"Event seat {eventSeat.Id} references venue seat {eventSeat.VenueSeatId}, which is not in the catalog.");
 
         var status = eventSeat.Status switch
         {
             EventSeatStatus.Sold => EventSeatAvailabilityStatus.Sold,
-            _ when _eventSeatLocks.GetHolderIdentifier(eventSeat.Id) is not null => EventSeatAvailabilityStatus.Reserved,
-            _ => EventSeatAvailabilityStatus.Available
+            _ => await _eventSeatLocks.GetHolderIdentifierAsync(eventSeat.Id, cancellationToken) is not null
+                ? EventSeatAvailabilityStatus.Reserved
+                : EventSeatAvailabilityStatus.Available
         };
 
         return new EventSeatAvailability(eventSeat.Id, venueSeat.SeatNumber, status);

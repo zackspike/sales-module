@@ -16,18 +16,18 @@ public class GetAvailableEventSeatsHandlerTests
     private static readonly Guid VenueSeatB1 = Guid.Parse("66666666-6666-6666-6666-666666666666");
 
     [Fact]
-    public void Returns_available_seats_sorted_ordinal_ignore_case()
+    public async Task Returns_available_seats_sorted_ordinal_ignore_case()
     {
         var seats = new[] { Seat("a-2"), Seat("A-10"), Seat("B-1") };
         var repository = new FakeEventSeatRepository(seats);
-        var result = Handler(repository, VenueCatalog(seats)).Handle(new(EventId));
+        var result = await Handler(repository, VenueCatalog(seats)).HandleAsync(new(EventId), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal(["A-10", "a-2", "B-1"], result.Select(seat => seat.SeatNumber));
     }
 
     [Fact]
-    public void Cache_hit_skips_event_and_repository_but_still_filters_locks()
+    public async Task Cache_hit_skips_event_and_repository_but_still_filters_locks()
     {
         var seat = Seat("A-1");
         var cache = new FakeAvailableEventSeatsCache();
@@ -37,7 +37,7 @@ public class GetAvailableEventSeatsHandlerTests
         var repository = new FakeEventSeatRepository(seat);
         var catalog = new FakeEventCatalog();
 
-        var result = Handler(repository, VenueCatalog(seat), cache, locks, catalog).Handle(new(EventId));
+        var result = await Handler(repository, VenueCatalog(seat), cache, locks, catalog).HandleAsync(new(EventId), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Empty(result);
@@ -47,7 +47,7 @@ public class GetAvailableEventSeatsHandlerTests
     }
 
     [Fact]
-    public void Cache_miss_excludes_locked_seat_but_caches_it()
+    public async Task Cache_miss_excludes_locked_seat_but_caches_it()
     {
         var seat = Seat("A-1");
         var repository = new FakeEventSeatRepository(seat);
@@ -55,7 +55,7 @@ public class GetAvailableEventSeatsHandlerTests
         var locks = new FakeEventSeatLockStore();
         locks.TryAcquire(seat.Id, "buyer@example.com", TimeSpan.FromMinutes(10));
 
-        var first = Handler(repository, VenueCatalog(seat), cache, locks).Handle(new(EventId));
+        var first = await Handler(repository, VenueCatalog(seat), cache, locks).HandleAsync(new(EventId), CancellationToken.None);
         Assert.NotNull(first);
         Assert.Empty(first);
         Assert.Contains(cache.Values[EventId], cached => cached.EventSeatId == seat.Id);
@@ -63,7 +63,7 @@ public class GetAvailableEventSeatsHandlerTests
     }
 
     [Fact]
-    public void Cached_seats_are_returned_after_repository_seat_is_sold()
+    public async Task Cached_seats_are_returned_after_repository_seat_is_sold()
     {
         var seat = Seat("A-1");
         var repository = new FakeEventSeatRepository(seat);
@@ -71,9 +71,9 @@ public class GetAvailableEventSeatsHandlerTests
         var locks = new FakeEventSeatLockStore();
         var handler = Handler(repository, VenueCatalog(seat), cache, locks);
 
-        var first = handler.Handle(new(EventId));
+        var first = await handler.HandleAsync(new(EventId), CancellationToken.None);
         seat.Sell("Jane", "jane@example.com", DateTime.UtcNow);
-        var second = handler.Handle(new(EventId));
+        var second = await handler.HandleAsync(new(EventId), CancellationToken.None);
 
         Assert.NotNull(first);
         Assert.Single(first);
@@ -83,17 +83,17 @@ public class GetAvailableEventSeatsHandlerTests
     }
 
     [Fact]
-    public void Unknown_event_returns_null_without_caching()
+    public async Task Unknown_event_returns_null_without_caching()
     {
         var cache = new FakeAvailableEventSeatsCache();
         var catalog = new FakeEventCatalog();
-        var result = Handler(
+        var result = await Handler(
             new FakeEventSeatRepository(),
             new FakeVenueSeatCatalog(),
             cache,
             new FakeEventSeatLockStore(),
             catalog)
-            .Handle(new(EventId));
+            .HandleAsync(new(EventId), CancellationToken.None);
 
         Assert.Null(result);
         Assert.Empty(cache.Values);
@@ -101,13 +101,13 @@ public class GetAvailableEventSeatsHandlerTests
     }
 
     [Fact]
-    public void All_sold_returns_empty_and_caches_empty_list()
+    public async Task All_sold_returns_empty_and_caches_empty_list()
     {
         var seat = SoldSeat("A-1");
         var cache = new FakeAvailableEventSeatsCache();
 
-        var result = Handler(new FakeEventSeatRepository(seat), VenueCatalog(seat), cache, new FakeEventSeatLockStore())
-            .Handle(new(EventId));
+        var result = await Handler(new FakeEventSeatRepository(seat), VenueCatalog(seat), cache, new FakeEventSeatLockStore())
+            .HandleAsync(new(EventId), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Empty(result);
@@ -116,16 +116,16 @@ public class GetAvailableEventSeatsHandlerTests
     }
 
     [Fact]
-    public void Missing_venue_seat_throws_without_setting_cache()
+    public async Task Missing_venue_seat_throws_without_setting_cache()
     {
         var seat = Seat("A-1");
         var cache = new FakeAvailableEventSeatsCache();
 
-        Assert.Throws<InvalidOperationException>(() => Handler(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Handler(
             new FakeEventSeatRepository(seat),
             new FakeVenueSeatCatalog(),
             cache,
-            new FakeEventSeatLockStore()).Handle(new(EventId)));
+            new FakeEventSeatLockStore()).HandleAsync(new(EventId), CancellationToken.None));
         Assert.Equal(0, cache.SetCalls);
     }
 

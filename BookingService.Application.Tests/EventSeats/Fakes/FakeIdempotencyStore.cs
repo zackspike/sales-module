@@ -8,16 +8,21 @@ public sealed class FakeIdempotencyStore : IIdempotencyStore
 
     public bool ThrowOnRemember { get; init; }
 
-    public IdempotencyRecord? GetIdempotencyRecord(Guid idempotencyKey) =>
-        Records.TryGetValue(idempotencyKey, out var value) ? value.Record : null;
+    public Task<IdempotencyRecord?> GetIdempotencyRecordAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
+        Task.FromResult(Records.TryGetValue(idempotencyKey, out var value) ? value.Record : null);
 
-    public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention)
+    public Task RememberAsync(
+        Guid idempotencyKey,
+        IdempotencyRecord record,
+        TimeSpan retention,
+        CancellationToken cancellationToken)
     {
         if (ThrowOnRemember)
         {
-            throw new InvalidOperationException("store unavailable");
+            return Task.FromException(new InvalidOperationException("store unavailable"));
         }
 
         Records[idempotencyKey] = (record, retention);
+        return Task.CompletedTask;
     }
 }

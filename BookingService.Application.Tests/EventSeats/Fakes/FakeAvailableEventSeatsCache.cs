@@ -11,17 +11,20 @@ public sealed class FakeAvailableEventSeatsCache : IAvailableEventSeatsCache
 
     public int InvalidateCalls { get; private set; }
 
-    public IReadOnlyList<AvailableEventSeat>? Get(Guid eventId) => Values.GetValueOrDefault(eventId);
+    public Task<IReadOnlyList<AvailableEventSeat>?> GetAsync(Guid eventId, CancellationToken cancellationToken) =>
+        Task.FromResult(Values.GetValueOrDefault(eventId));
 
-    public void Set(Guid eventId, IReadOnlyList<AvailableEventSeat> seats)
+    public Task SetAsync(Guid eventId, IReadOnlyList<AvailableEventSeat> seats, CancellationToken cancellationToken)
     {
         SetCalls++;
         Values[eventId] = seats;
+        return Task.CompletedTask;
     }
 
-    public void Invalidate(Guid eventId)
+    public Task InvalidateAsync(Guid eventId, CancellationToken cancellationToken)
     {
         InvalidateCalls++;
         Values.Remove(eventId);
+        return Task.CompletedTask;
     }
 }

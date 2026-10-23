@@ -12,13 +12,13 @@ public class ReserveEventSeatHandlerTests
     private static readonly Guid VenueSeatId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     [Fact]
-    public void Available_seat_is_reserved_with_normalized_holder()
+    public async Task Available_seat_is_reserved_with_normalized_holder()
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
         var before = DateTime.UtcNow;
-        var result = Handler(new FakeEventSeatRepository(seat), locks)
-            .Handle(Command(seat.Id, "Jane Doe", " JUAN.Perez@Example.com "));
+        var result = await Handler(new FakeEventSeatRepository(seat), locks)
+            .HandleAsync(Command(seat.Id, "Jane Doe", " JUAN.Perez@Example.com "), CancellationToken.None);
         var after = DateTime.UtcNow;
 
         Assert.Equal(ReserveEventSeatStatus.Reserved, result.Status);
@@ -35,13 +35,13 @@ public class ReserveEventSeatHandlerTests
     }
 
     [Fact]
-    public void Invalid_holder_does_not_touch_repository_or_locks()
+    public async Task Invalid_holder_does_not_touch_repository_or_locks()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat);
         var locks = new FakeEventSeatLockStore();
 
-        var result = Handler(repository, locks).Handle(Command(seat.Id, "", "bad"));
+        var result = await Handler(repository, locks).HandleAsync(Command(seat.Id, "", "bad"), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.Invalid, result.Status);
         Assert.Empty(repository.RequestedIds);
@@ -49,60 +49,60 @@ public class ReserveEventSeatHandlerTests
     }
 
     [Fact]
-    public void Unknown_event_returns_not_found()
+    public async Task Unknown_event_returns_not_found()
     {
         var seat = Seat();
 
-        var result = Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore(), false)
-            .Handle(Command(seat.Id));
+        var result = await Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore(), false)
+            .HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.EventNotFound, result.Status);
     }
 
     [Fact]
-    public void Unknown_seat_returns_not_found()
+    public async Task Unknown_seat_returns_not_found()
     {
-        var result = Handler(new FakeEventSeatRepository(Seat()), new FakeEventSeatLockStore())
-            .Handle(Command(Guid.NewGuid()));
+        var result = await Handler(new FakeEventSeatRepository(Seat()), new FakeEventSeatLockStore())
+            .HandleAsync(Command(Guid.NewGuid()), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.EventSeatNotFound, result.Status);
     }
 
     [Fact]
-    public void Sold_seat_is_rejected()
+    public async Task Sold_seat_is_rejected()
     {
         var seat = Seat();
         seat.Sell("Old", "old@example.com", DateTime.UtcNow);
 
-        var result = Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore())
-            .Handle(Command(seat.Id));
+        var result = await Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore())
+            .HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.AlreadySold, result.Status);
     }
 
     [Fact]
-    public void Another_holder_is_not_replaced()
+    public async Task Another_holder_is_not_replaced()
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
         locks.TryAcquire(seat.Id, "other@example.com", TimeSpan.FromMinutes(10));
 
-        var result = Handler(new FakeEventSeatRepository(seat), locks).Handle(Command(seat.Id));
+        var result = await Handler(new FakeEventSeatRepository(seat), locks).HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.ReservedByAnotherBuyer, result.Status);
         Assert.Equal("other@example.com", locks.GetHolderIdentifier(seat.Id));
     }
 
     [Fact]
-    public void Same_holder_renews_the_reservation()
+    public async Task Same_holder_renews_the_reservation()
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
         locks.TryAcquire(seat.Id, "juan@example.com", TimeSpan.FromMinutes(10));
         locks.ResetAcquireCalls();
 
-        var result = Handler(new FakeEventSeatRepository(seat), locks)
-            .Handle(Command(seat.Id, "Juan", " JUAN@Example.com "));
+        var result = await Handler(new FakeEventSeatRepository(seat), locks)
+            .HandleAsync(Command(seat.Id, "Juan", " JUAN@Example.com "), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.Reserved, result.Status);
         Assert.Equal(1, locks.AcquireCalls);
@@ -111,21 +111,21 @@ public class ReserveEventSeatHandlerTests
     }
 
     [Fact]
-    public void Missing_venue_seat_throws_before_locking()
+    public async Task Missing_venue_seat_throws_before_locking()
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
 
-        Assert.Throws<InvalidOperationException>(() => new ReserveEventSeatHandler(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ReserveEventSeatHandler(
             new FakeEventCatalog(EventId),
             new FakeEventSeatRepository(seat),
             new FakeVenueSeatCatalog(),
-            locks).Handle(Command(seat.Id)));
+            locks).HandleAsync(Command(seat.Id), CancellationToken.None));
         Assert.Empty(locks.Holders);
     }
 
     [Fact]
-    public void Sale_after_lock_is_rejected_and_lock_is_released()
+    public async Task Sale_after_lock_is_rejected_and_lock_is_released()
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
@@ -134,7 +134,7 @@ public class ReserveEventSeatHandlerTests
             AfterSecondRead = current => current?.Sell("buyer", "buyer@example.com", DateTime.UtcNow)
         };
 
-        var result = Handler(repository, locks).Handle(Command(seat.Id));
+        var result = await Handler(repository, locks).HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.AlreadySold, result.Status);
         Assert.Equal(1, locks.AcquireCalls);
@@ -142,13 +142,13 @@ public class ReserveEventSeatHandlerTests
     }
 
     [Fact]
-    public void Seat_disappearing_after_lock_is_not_found_and_lock_is_released()
+    public async Task Seat_disappearing_after_lock_is_not_found_and_lock_is_released()
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
         var repository = new FakeEventSeatRepository(seat) { ReturnNullAfterSecondRead = true };
 
-        var result = Handler(repository, locks).Handle(Command(seat.Id));
+        var result = await Handler(repository, locks).HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.EventSeatNotFound, result.Status);
         Assert.Null(locks.GetHolderIdentifier(seat.Id));
