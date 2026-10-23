@@ -11,16 +11,16 @@ public interface IAvailableEventSeatsCache
     /// <summary>
     /// Returns the cached available seats of <paramref name="eventId"/>, or null on a cache miss.
     /// </summary>
-    IReadOnlyList<AvailableEventSeat>? Get(Guid eventId);
+    Task<IReadOnlyList<AvailableEventSeat>?> GetAsync(Guid eventId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Stores the available seats of <paramref name="eventId"/> for a short time. Only call it for existing
     /// events: a cache hit is taken as proof that the event exists.
     /// </summary>
-    void Set(Guid eventId, IReadOnlyList<AvailableEventSeat> seats);
+    Task SetAsync(Guid eventId, IReadOnlyList<AvailableEventSeat> seats, CancellationToken cancellationToken);
 
     /// <summary>
     /// Drops the cached seats of <paramref name="eventId"/> after one of them is sold.
     /// </summary>
-    void Invalidate(Guid eventId);
+    Task InvalidateAsync(Guid eventId, CancellationToken cancellationToken);
 }

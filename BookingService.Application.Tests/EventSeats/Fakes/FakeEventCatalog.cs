@@ -8,9 +8,9 @@ public sealed class FakeEventCatalog(params Guid[] eventIds) : IEventCatalog
 
     public List<Guid> RequestedIds { get; } = [];
 
-    public bool Exists(Guid eventId)
+    public Task<bool> ExistsAsync(Guid eventId, CancellationToken cancellationToken)
     {
         RequestedIds.Add(eventId);
-        return _eventIds.Contains(eventId);
+        return Task.FromResult(_eventIds.Contains(eventId));
     }
 }

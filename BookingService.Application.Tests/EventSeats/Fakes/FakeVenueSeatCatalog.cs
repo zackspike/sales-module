@@ -7,8 +7,12 @@ public sealed class FakeVenueSeatCatalog(params VenueSeat[] venueSeats) : IVenue
 {
     private readonly Dictionary<Guid, VenueSeat> _venueSeats = venueSeats.ToDictionary(seat => seat.Id);
 
-    public VenueSeat? GetById(Guid venueSeatId) => _venueSeats.GetValueOrDefault(venueSeatId);
+    public Task<VenueSeat?> GetByIdAsync(Guid venueSeatId, CancellationToken cancellationToken) =>
+        Task.FromResult(_venueSeats.GetValueOrDefault(venueSeatId));
 
-    public IReadOnlyCollection<VenueSeat> GetByIds(IReadOnlyCollection<Guid> venueSeatIds) =>
-        venueSeatIds.Where(_venueSeats.ContainsKey).Select(venueSeatId => _venueSeats[venueSeatId]).ToArray();
+    public Task<IReadOnlyCollection<VenueSeat>> GetByIdsAsync(
+        IReadOnlyCollection<Guid> venueSeatIds,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyCollection<VenueSeat>>(
+            venueSeatIds.Where(_venueSeats.ContainsKey).Select(venueSeatId => _venueSeats[venueSeatId]).ToArray());
 }

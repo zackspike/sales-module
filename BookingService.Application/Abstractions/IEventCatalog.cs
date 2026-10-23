@@ -9,5 +9,5 @@ public interface IEventCatalog
     /// <summary>
     /// Returns true if the event with the given id exists, false otherwise.
     /// </summary>
-    bool Exists(Guid eventId);
+    Task<bool> ExistsAsync(Guid eventId, CancellationToken cancellationToken);
 }

@@ -11,26 +11,32 @@ public interface IEventSeatLockStore
     /// Locks <paramref name="eventSeatId"/> for <paramref name="holderIdentifier"/> during <paramref name="duration"/>.
     /// If the same holder already has it, the lock is renewed for another <paramref name="duration"/>.
     /// </summary>
-    EventSeatLockResult TryAcquire(Guid eventSeatId, string holderIdentifier, TimeSpan duration);
+    Task<EventSeatLockResult> TryAcquireAsync(
+        Guid eventSeatId,
+        string holderIdentifier,
+        TimeSpan duration,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Returns the holder of the lock of <paramref name="eventSeatId"/>, or null if it is not locked.
     /// </summary>
-    string? GetHolderIdentifier(Guid eventSeatId);
+    Task<string?> GetHolderIdentifierAsync(Guid eventSeatId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Returns which of <paramref name="eventSeatIds"/> are currently locked by anyone.
     /// </summary>
-    IReadOnlySet<Guid> GetLockedEventSeatIds(IReadOnlyCollection<Guid> eventSeatIds);
+    Task<IReadOnlySet<Guid>> GetLockedEventSeatIdsAsync(
+        IReadOnlyCollection<Guid> eventSeatIds,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Removes the lock of <paramref name="eventSeatId"/> only if it is held by <paramref name="holderIdentifier"/>.
     /// </summary>
-    bool Release(Guid eventSeatId, string holderIdentifier);
+    Task<bool> ReleaseAsync(Guid eventSeatId, string holderIdentifier, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// Outcome of <see cref="IEventSeatLockStore.TryAcquire"/>.
+/// Outcome of <see cref="IEventSeatLockStore.TryAcquireAsync"/>.
 /// </summary>
 public enum EventSeatLockResult
 {

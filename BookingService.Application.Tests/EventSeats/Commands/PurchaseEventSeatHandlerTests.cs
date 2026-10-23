@@ -18,7 +18,7 @@ public class PurchaseEventSeatHandlerTests
     private static readonly Guid VenueSeatId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     [Fact]
-    public void Purchase_issues_ticket_and_releases_the_lock()
+    public async Task Purchase_issues_ticket_and_releases_the_lock()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat);
@@ -26,7 +26,7 @@ public class PurchaseEventSeatHandlerTests
         var key = Guid.NewGuid();
         var before = DateTime.UtcNow;
 
-        var result = Handler(repository, locks).Handle(Command(seat.Id, key, " Jane Doe ", " JANE@example.com "));
+        var result = await Handler(repository, locks).HandleAsync(Command(seat.Id, key, " Jane Doe ", " JANE@example.com "), CancellationToken.None);
         var after = DateTime.UtcNow;
 
         Assert.Equal(PurchaseEventSeatStatus.Purchased, result.Status);
@@ -40,7 +40,7 @@ public class PurchaseEventSeatHandlerTests
     }
 
     [Fact]
-    public void Purchase_remembers_key_and_invalidates_event_cache()
+    public async Task Purchase_remembers_key_and_invalidates_event_cache()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat);
@@ -49,7 +49,7 @@ public class PurchaseEventSeatHandlerTests
         var cache = new FakeAvailableEventSeatsCache();
         var key = Guid.NewGuid();
 
-        var result = Handler(repository, locks, idempotency, cache: cache).Handle(Command(seat.Id, key));
+        var result = await Handler(repository, locks, idempotency, cache: cache).HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.Purchased, result.Status);
         Assert.Equal(new IdempotencyRecord(EventId, seat.Id), idempotency.Records[key].Record);
@@ -58,19 +58,19 @@ public class PurchaseEventSeatHandlerTests
     }
 
     [Fact]
-    public void Invalid_input_is_rejected_before_event_lookup()
+    public async Task Invalid_input_is_rejected_before_event_lookup()
     {
         var catalog = new FakeEventCatalog(EventId);
         var repository = new FakeEventSeatRepository();
-        var result = new PurchaseEventSeatHandler(
+        var result = await new PurchaseEventSeatHandler(
             catalog,
             repository,
             new FakeVenueSeatCatalog(),
             new FakeEventSeatLockStore(),
             new FakeIdempotencyStore(),
             new FakeAvailableEventSeatsCache(),
-            NullLogger<PurchaseEventSeatHandler>.Instance).Handle(
-                Command(Guid.NewGuid(), Guid.Empty, "", "bad"));
+            NullLogger<PurchaseEventSeatHandler>.Instance).HandleAsync(
+                Command(Guid.NewGuid(), Guid.Empty, "", "bad"), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.Invalid, result.Status);
         Assert.Empty(catalog.RequestedIds);
@@ -79,45 +79,45 @@ public class PurchaseEventSeatHandlerTests
     }
 
     [Fact]
-    public void Empty_idempotency_key_is_invalid()
+    public async Task Empty_idempotency_key_is_invalid()
     {
-        var result = Handler(new FakeEventSeatRepository(Seat()), new FakeEventSeatLockStore())
-            .Handle(Command(Guid.NewGuid(), Guid.Empty));
+        var result = await Handler(new FakeEventSeatRepository(Seat()), new FakeEventSeatLockStore())
+            .HandleAsync(Command(Guid.NewGuid(), Guid.Empty), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.Invalid, result.Status);
         Assert.Contains("idempotencyKey", result.Errors.Keys);
     }
 
     [Fact]
-    public void Unknown_event_returns_not_found_before_reading_the_seat()
+    public async Task Unknown_event_returns_not_found_before_reading_the_seat()
     {
         var catalog = new FakeEventCatalog();
         var repository = new FakeEventSeatRepository();
-        var result = new PurchaseEventSeatHandler(
+        var result = await new PurchaseEventSeatHandler(
             catalog,
             repository,
             new FakeVenueSeatCatalog(),
             new FakeEventSeatLockStore(),
             new FakeIdempotencyStore(),
             new FakeAvailableEventSeatsCache(),
-            NullLogger<PurchaseEventSeatHandler>.Instance).Handle(
-                new(OtherEventId, Guid.NewGuid(), "Jane Doe", "jane@example.com", Guid.NewGuid()));
+            NullLogger<PurchaseEventSeatHandler>.Instance).HandleAsync(
+                new(OtherEventId, Guid.NewGuid(), "Jane Doe", "jane@example.com", Guid.NewGuid()), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.EventNotFound, result.Status);
         Assert.Empty(repository.RequestedIds);
     }
 
     [Fact]
-    public void Existing_event_with_unknown_seat_returns_not_found()
+    public async Task Existing_event_with_unknown_seat_returns_not_found()
     {
-        var result = Handler(new FakeEventSeatRepository(), new FakeEventSeatLockStore())
-            .Handle(Command(Guid.NewGuid()));
+        var result = await Handler(new FakeEventSeatRepository(), new FakeEventSeatLockStore())
+            .HandleAsync(Command(Guid.NewGuid()), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.EventSeatNotFound, result.Status);
     }
 
     [Fact]
-    public void Seat_disappearing_before_sell_returns_not_found()
+    public async Task Seat_disappearing_before_sell_returns_not_found()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat)
@@ -125,13 +125,13 @@ public class PurchaseEventSeatHandlerTests
             RemoveSeatBeforeSellOnce = true
         };
 
-        var result = Handler(repository, BuyerLock(seat)).Handle(Command(seat.Id));
+        var result = await Handler(repository, BuyerLock(seat)).HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.EventSeatNotFound, result.Status);
     }
 
     [Fact]
-    public void Remembered_key_for_another_event_is_a_conflict()
+    public async Task Remembered_key_for_another_event_is_a_conflict()
     {
         var seat = Seat();
         var key = Guid.NewGuid();
@@ -140,53 +140,53 @@ public class PurchaseEventSeatHandlerTests
             new IdempotencyRecord(OtherEventId, seat.Id),
             PurchaseEventSeatHandler.IdempotencyKeyRetention);
 
-        var result = Handler(
+        var result = await Handler(
             new FakeEventSeatRepository(seat),
             new FakeEventSeatLockStore(),
             idempotency)
-            .Handle(Command(seat.Id, key));
+            .HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.IdempotencyKeyConflict, result.Status);
     }
 
     [Fact]
-    public void Missing_lock_requires_reservation()
+    public async Task Missing_lock_requires_reservation()
     {
         var seat = Seat();
 
-        var result = Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore())
-            .Handle(Command(seat.Id));
+        var result = await Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore())
+            .HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.ReservationRequired, result.Status);
         Assert.Equal(EventSeatStatus.Available, seat.Status);
     }
 
     [Fact]
-    public void Other_holder_lock_requires_reservation()
+    public async Task Other_holder_lock_requires_reservation()
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
         locks.TryAcquire(seat.Id, "other@example.com", TimeSpan.FromMinutes(10));
 
-        var result = Handler(new FakeEventSeatRepository(seat), locks)
-            .Handle(Command(seat.Id, Guid.NewGuid(), "Jane", " JANE@example.com "));
+        var result = await Handler(new FakeEventSeatRepository(seat), locks)
+            .HandleAsync(Command(seat.Id, Guid.NewGuid(), "Jane", " JANE@example.com "), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.ReservationRequired, result.Status);
         Assert.Equal(EventSeatStatus.Available, seat.Status);
     }
 
     [Fact]
-    public void Remembered_purchase_replays_the_original_ticket()
+    public async Task Remembered_purchase_replays_the_original_ticket()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat);
         var idempotency = new FakeIdempotencyStore();
         var key = Guid.NewGuid();
         var locks = BuyerLock(seat);
-        var first = Handler(repository, locks, idempotency).Handle(Command(seat.Id, key));
+        var first = await Handler(repository, locks, idempotency).HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
-        var replay = Handler(repository, locks, idempotency).Handle(
-            Command(seat.Id, key, "Different", "different@example.com"));
+        var replay = await Handler(repository, locks, idempotency).HandleAsync(
+            Command(seat.Id, key, "Different", "different@example.com"), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.Purchased, first.Status);
         Assert.Equal(PurchaseEventSeatStatus.Replayed, replay.Status);
@@ -194,22 +194,22 @@ public class PurchaseEventSeatHandlerTests
     }
 
     [Fact]
-    public void Remembered_purchase_for_another_seat_is_a_conflict()
+    public async Task Remembered_purchase_for_another_seat_is_a_conflict()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat);
         var idempotency = new FakeIdempotencyStore();
         var key = Guid.NewGuid();
-        Handler(repository, BuyerLock(seat), idempotency).Handle(Command(seat.Id, key));
+        await Handler(repository, BuyerLock(seat), idempotency).HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
-        var result = Handler(repository, BuyerLock(seat), idempotency)
-            .Handle(Command(Guid.NewGuid(), key));
+        var result = await Handler(repository, BuyerLock(seat), idempotency)
+            .HandleAsync(Command(Guid.NewGuid(), key), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.IdempotencyKeyConflict, result.Status);
     }
 
     [Fact]
-    public void Repository_replay_for_another_seat_is_an_idempotency_conflict()
+    public async Task Repository_replay_for_another_seat_is_an_idempotency_conflict()
     {
         var seat = Seat();
         var otherSeat = Seat();
@@ -217,56 +217,56 @@ public class PurchaseEventSeatHandlerTests
         var repository = new FakeEventSeatRepository(seat, otherSeat);
         repository.RememberSale(key, otherSeat);
 
-        var result = Handler(repository, BuyerLock(seat)).Handle(Command(seat.Id, key));
+        var result = await Handler(repository, BuyerLock(seat)).HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.IdempotencyKeyConflict, result.Status);
         Assert.Equal(EventSeatStatus.Available, seat.Status);
     }
 
     [Fact]
-    public void Sold_seat_replays_from_repository_after_cache_expiry()
+    public async Task Sold_seat_replays_from_repository_after_cache_expiry()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat);
         var idempotency = new FakeIdempotencyStore();
         var key = Guid.NewGuid();
-        Handler(repository, BuyerLock(seat), idempotency).Handle(Command(seat.Id, key));
+        await Handler(repository, BuyerLock(seat), idempotency).HandleAsync(Command(seat.Id, key), CancellationToken.None);
         idempotency.Records.Clear();
 
-        var result = Handler(repository, new FakeEventSeatLockStore(), idempotency)
-            .Handle(Command(seat.Id, key));
+        var result = await Handler(repository, new FakeEventSeatLockStore(), idempotency)
+            .HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.Replayed, result.Status);
     }
 
     [Fact]
-    public void Different_key_on_sold_seat_is_already_sold()
+    public async Task Different_key_on_sold_seat_is_already_sold()
     {
         var seat = Seat();
         seat.Sell("Jane", "jane@example.com", DateTime.UtcNow);
 
-        var result = Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore())
-            .Handle(Command(seat.Id));
+        var result = await Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore())
+            .HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.AlreadySold, result.Status);
     }
 
     [Fact]
-    public void Missing_sale_after_remembered_record_returns_not_found()
+    public async Task Missing_sale_after_remembered_record_returns_not_found()
     {
         var seat = Seat();
         var idempotency = new FakeIdempotencyStore();
         var key = Guid.NewGuid();
         idempotency.Records[key] = (new IdempotencyRecord(EventId, seat.Id), TimeSpan.FromMinutes(10));
 
-        var result = Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore(), idempotency)
-            .Handle(Command(seat.Id, key));
+        var result = await Handler(new FakeEventSeatRepository(seat), new FakeEventSeatLockStore(), idempotency)
+            .HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.EventSeatNotFound, result.Status);
     }
 
     [Fact]
-    public void Lock_mismatch_with_sold_re_read_returns_replayed_for_matching_key()
+    public async Task Lock_mismatch_with_sold_re_read_returns_replayed_for_matching_key()
     {
         var seat = Seat();
         var key = Guid.NewGuid();
@@ -281,13 +281,13 @@ public class PurchaseEventSeatHandlerTests
         var locks = new FakeEventSeatLockStore();
         locks.TryAcquire(seat.Id, "other@example.com", TimeSpan.FromMinutes(10));
 
-        var result = Handler(repository, locks).Handle(Command(seat.Id, key));
+        var result = await Handler(repository, locks).HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.Replayed, result.Status);
     }
 
     [Fact]
-    public void Lock_mismatch_with_sold_re_read_returns_already_sold_for_other_key()
+    public async Task Lock_mismatch_with_sold_re_read_returns_already_sold_for_other_key()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat)
@@ -297,46 +297,46 @@ public class PurchaseEventSeatHandlerTests
         var locks = new FakeEventSeatLockStore();
         locks.TryAcquire(seat.Id, "other@example.com", TimeSpan.FromMinutes(10));
 
-        var result = Handler(repository, locks).Handle(Command(seat.Id));
+        var result = await Handler(repository, locks).HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.AlreadySold, result.Status);
     }
 
     [Fact]
-    public void Already_sold_exception_is_translated_to_already_sold()
+    public async Task Already_sold_exception_is_translated_to_already_sold()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat) { ThrowAlreadySold = true };
 
-        var result = Handler(repository, BuyerLock(seat)).Handle(Command(seat.Id));
+        var result = await Handler(repository, BuyerLock(seat)).HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.AlreadySold, result.Status);
     }
 
     [Fact]
-    public void Post_commit_failure_is_logged_and_purchase_remains_successful()
+    public async Task Post_commit_failure_is_logged_and_purchase_remains_successful()
     {
         var seat = Seat();
         var idempotency = new FakeIdempotencyStore { ThrowOnRemember = true };
         var logger = new FakeLogger();
 
-        var result = Handler(new FakeEventSeatRepository(seat), BuyerLock(seat), idempotency, logger: logger)
-            .Handle(Command(seat.Id));
+        var result = await Handler(new FakeEventSeatRepository(seat), BuyerLock(seat), idempotency, logger: logger)
+            .HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.Purchased, result.Status);
         Assert.Contains(LogLevel.Warning, logger.Levels);
     }
 
     [Fact]
-    public void Missing_venue_seat_is_not_sold()
+    public async Task Missing_venue_seat_is_not_sold()
     {
         var seat = Seat();
         var locks = BuyerLock(seat);
 
-        Assert.Throws<InvalidOperationException>(() => Handler(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Handler(
             new FakeEventSeatRepository(seat),
             locks,
-            venue: new FakeVenueSeatCatalog()).Handle(Command(seat.Id)));
+            venue: new FakeVenueSeatCatalog()).HandleAsync(Command(seat.Id), CancellationToken.None));
         Assert.Equal(EventSeatStatus.Available, seat.Status);
     }
 
