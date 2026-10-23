@@ -16,7 +16,9 @@ public sealed class BookingDbContextFactory : IDesignTimeDbContextFactory<Bookin
     public BookingDbContext CreateDbContext(string[] args)
     {
         var connectionString =
-            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") ?? DefaultConnectionString;
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection"))
+                ? DefaultConnectionString
+                : Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")!;
 
         var options = new DbContextOptionsBuilder<BookingDbContext>()
             .UseNpgsql(connectionString)
