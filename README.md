@@ -75,9 +75,11 @@ booking-service/
    ```bash
    dotnet test
    ```
-   PostgreSQL integration tests are skipped unless `ConnectionStrings__DefaultConnection` is set
-   (e.g. `Host=localhost;Port=5433;Database=bookingservice_db;Username=postgres;Password=postgres`),
-   and Redis integration tests unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
+   PostgreSQL integration tests require Docker to be running: they start a disposable
+   `postgres:17-alpine` container with [Testcontainers](https://dotnet.testcontainers.org/), apply the
+   EF Core migrations to it and remove it afterwards. They never read `ConnectionStrings__DefaultConnection`
+   or any other application setting, so `dotnet test` cannot touch your development database.
+   Redis integration tests are skipped unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
 
 6. **Lint (code quality & formatting):**
    * Verify formatting (lint check):

@@ -1,16 +1,16 @@
 using System.Text.Json;
 using BookingService.Application.Abstractions;
-using BookingService.Application.Tickets.Dtos;
+using BookingService.Application.EventSeats.ReadModels;
 using StackExchange.Redis;
 
 namespace BookingService.Infrastructure.Caching;
 
 /// <summary>
-/// Available seats of an event as a JSON Redis string <c>booking:event:{eventId}:available-seats</c>.
+/// Available seats of an event cached in Redis as JSON under <c>booking:event:{eventId}:available-seats</c>.
 /// The short TTL bounds how long a stale copy (e.g. rebuilt while a sale was committing) can live;
 /// reservations and purchases always re-check the repository.
 /// </summary>
-public sealed class RedisAvailableSeatsCache : IAvailableSeatsCache
+public sealed class RedisAvailableSeatsCache : IAvailableEventSeatsCache
 {
     public static readonly TimeSpan TimeToLive = TimeSpan.FromSeconds(30);
 
@@ -18,22 +18,39 @@ public sealed class RedisAvailableSeatsCache : IAvailableSeatsCache
 
     public RedisAvailableSeatsCache(IConnectionMultiplexer redis)
     {
+        ArgumentNullException.ThrowIfNull(redis);
         _redis = redis;
     }
 
-    public IReadOnlyList<SeatAvailabilityDto>? Get(Guid eventId)
+    private IDatabase Database => _redis.GetDatabase();
+
+    public IReadOnlyList<AvailableEventSeat>? Get(Guid eventId)
     {
-        var value = _redis.GetDatabase().StringGet(RedisKeys.AvailableSeats(eventId));
-        return value.HasValue ? JsonSerializer.Deserialize<List<SeatAvailabilityDto>>(value.ToString()) : null;
+        var value = Database.StringGet(RedisKeys.AvailableSeats(eventId));
+        if (value.IsNullOrEmpty)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<AvailableEventSeat>>((byte[])value!);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
-    public void Set(Guid eventId, IReadOnlyList<SeatAvailabilityDto> seats)
+    public void Set(Guid eventId, IReadOnlyList<AvailableEventSeat> seats)
     {
-        _redis.GetDatabase().StringSet(RedisKeys.AvailableSeats(eventId), JsonSerializer.Serialize(seats), TimeToLive);
+        ArgumentNullException.ThrowIfNull(seats);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(seats);
+        Database.StringSet(RedisKeys.AvailableSeats(eventId), bytes, TimeToLive);
     }
 
     public void Invalidate(Guid eventId)
     {
-        _redis.GetDatabase().KeyDelete(RedisKeys.AvailableSeats(eventId));
+        Database.KeyDelete(RedisKeys.AvailableSeats(eventId));
     }
 }

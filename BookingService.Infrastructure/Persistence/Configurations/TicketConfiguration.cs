@@ -1,4 +1,4 @@
-using BookingService.Domain.Events;
+using BookingService.Domain.EventSeats;
 using BookingService.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -13,51 +13,36 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.HasKey(t => t.Id);
 
-        builder.Property(t => t.EventId)
+        builder.Property(t => t.EventSeatId)
             .IsRequired();
 
-        builder.HasOne<Event>()
+        builder.HasOne<EventSeat>()
             .WithMany()
-            .HasForeignKey(t => t.EventId)
+            .HasForeignKey(t => t.EventSeatId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.Property(t => t.SeatNumber)
-            .IsRequired()
-            .HasMaxLength(50);
-
-        builder.Property(t => t.Status)
-            .IsRequired()
-            .HasConversion<string>()
-            .HasMaxLength(30);
-
-        builder.Property(t => t.FullName)
-            .HasMaxLength(200);
-
-        builder.Property(t => t.Email)
-            .HasMaxLength(256);
+        builder.HasIndex(t => t.EventSeatId)
+            .IsUnique();
 
         builder.Property(t => t.TicketCode)
             .HasMaxLength(100);
 
-        builder.Property(t => t.IdempotencyKey)
+        builder.Property(t => t.HolderName)
+            .IsRequired()
+            .HasMaxLength(Ticket.MaxHolderFullNameLength);
+
+        builder.Property(t => t.HolderEmail)
+            .IsRequired()
+            .HasMaxLength(Ticket.MaxHolderEmailLength);
+
+        builder.Property(t => t.SoldAtUtc)
             .IsRequired();
 
-        builder.Property(t => t.CreatedAtUtc)
+        builder.Property<Guid>("IdempotencyKey")
             .IsRequired();
 
-        builder.Property(t => t.PurchasedAtUtc);
-
-        builder.HasIndex(t => new { t.EventId, t.SeatNumber })
-            .IsUnique();
-
-        builder.HasIndex(t => t.IdempotencyKey)
+        builder.HasIndex("IdempotencyKey")
             .IsUnique()
             .HasFilter("\"IdempotencyKey\" != '00000000-0000-0000-0000-000000000000'");
-
-        builder.Property<uint>("xmin")
-            .HasColumnName("xmin")
-            .HasColumnType("xid")
-            .ValueGeneratedOnAddOrUpdate()
-            .IsConcurrencyToken();
     }
 }

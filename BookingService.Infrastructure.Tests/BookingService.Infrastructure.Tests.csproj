@@ -10,17 +10,13 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\BookingService.Infrastructure\BookingService.Infrastructure.csproj" />
-  </ItemGroup>
-
-  <!-- TODO: re-enable when Infrastructure is migrated to EventSeats -->
-  <ItemGroup>
-    <Compile Remove="*Tests.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,5 @@
 using BookingService.Application.Abstractions;
-using BookingService.Application.Tickets.Dtos;
+using BookingService.Application.EventSeats.ReadModels;
 using BookingService.Infrastructure.Caching;
 using StackExchange.Redis;
 
@@ -27,30 +27,30 @@ public class RedisStoreTests
 
     private static readonly TimeSpan Duration = TimeSpan.FromMinutes(1);
 
-    private readonly Guid _ticketId = Guid.NewGuid();
+    private readonly Guid _eventSeatId = Guid.NewGuid();
 
     [RedisFact]
     public void Seat_lock_is_acquired_renewed_by_its_holder_and_refused_to_others()
     {
         var locks = new RedisSeatLockStore(Redis.Value);
 
-        Assert.Equal(SeatLockResult.Acquired, locks.TryAcquire(_ticketId, "a", Duration));
-        Assert.Equal(SeatLockResult.Renewed, locks.TryAcquire(_ticketId, "a", Duration));
-        Assert.Equal(SeatLockResult.HeldByAnother, locks.TryAcquire(_ticketId, "b", Duration));
-        Assert.Equal("a", locks.GetHolder(_ticketId));
-        Assert.Equal([_ticketId], locks.GetLockedTicketIds([_ticketId, Guid.NewGuid()]));
+        Assert.Equal(EventSeatLockResult.Acquired, locks.TryAcquire(_eventSeatId, "a", Duration));
+        Assert.Equal(EventSeatLockResult.Renewed, locks.TryAcquire(_eventSeatId, "a", Duration));
+        Assert.Equal(EventSeatLockResult.HeldByAnother, locks.TryAcquire(_eventSeatId, "b", Duration));
+        Assert.Equal("a", locks.GetHolderIdentifier(_eventSeatId));
+        Assert.Equal([_eventSeatId], locks.GetLockedEventSeatIds([_eventSeatId, Guid.NewGuid()]));
     }
 
     [RedisFact]
     public void Concurrent_buyers_lock_the_seat_once()
     {
         var locks = new RedisSeatLockStore(Redis.Value);
-        var results = new SeatLockResult[20];
+        var results = new EventSeatLockResult[20];
 
-        Parallel.For(0, results.Length, i => results[i] = locks.TryAcquire(_ticketId, $"buyer{i}", Duration));
+        Parallel.For(0, results.Length, i => results[i] = locks.TryAcquire(_eventSeatId, $"buyer{i}", Duration));
 
-        Assert.Single(results, r => r == SeatLockResult.Acquired);
-        Assert.Equal(19, results.Count(r => r == SeatLockResult.HeldByAnother));
+        Assert.Single(results, r => r == EventSeatLockResult.Acquired);
+        Assert.Equal(19, results.Count(r => r == EventSeatLockResult.HeldByAnother));
     }
 
     [RedisFact]
@@ -58,14 +58,14 @@ public class RedisStoreTests
     {
         var locks = new RedisSeatLockStore(Redis.Value);
 
-        locks.TryAcquire(_ticketId, "a", TimeSpan.FromMilliseconds(200));
+        locks.TryAcquire(_eventSeatId, "a", TimeSpan.FromMilliseconds(200));
         Thread.Sleep(400);
-        Assert.Null(locks.GetHolder(_ticketId));
+        Assert.Null(locks.GetHolderIdentifier(_eventSeatId));
 
-        locks.TryAcquire(_ticketId, "a", Duration);
-        Assert.False(locks.Release(_ticketId, "b"));
-        Assert.True(locks.Release(_ticketId, "a"));
-        Assert.Null(locks.GetHolder(_ticketId));
+        locks.TryAcquire(_eventSeatId, "a", Duration);
+        Assert.False(locks.Release(_eventSeatId, "b"));
+        Assert.True(locks.Release(_eventSeatId, "a"));
+        Assert.Null(locks.GetHolderIdentifier(_eventSeatId));
     }
 
     [RedisFact]
@@ -73,11 +73,11 @@ public class RedisStoreTests
     {
         var store = new RedisIdempotencyStore(Redis.Value);
         var key = Guid.NewGuid();
-        var record = new IdempotencyRecord(Guid.NewGuid(), _ticketId);
+        var record = new IdempotencyRecord(Guid.NewGuid(), _eventSeatId);
 
-        Assert.Null(store.Get(key));
+        Assert.Null(store.GetIdempotencyRecord(key));
         store.Remember(key, record, Duration);
-        Assert.Equal(record, store.Get(key));
+        Assert.Equal(record, store.GetIdempotencyRecord(key));
     }
 
     [RedisFact]
@@ -85,7 +85,7 @@ public class RedisStoreTests
     {
         var cache = new RedisAvailableSeatsCache(Redis.Value);
         var eventId = Guid.NewGuid();
-        var seats = new List<SeatAvailabilityDto> { new(_ticketId, "A-1", "Available") };
+        var seats = new List<AvailableEventSeat> { new(_eventSeatId, "A-1") };
 
         cache.Set(eventId, seats);
         Assert.Equal(seats, cache.Get(eventId));

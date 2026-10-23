@@ -80,8 +80,9 @@ jobs:
           ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
         run: dotnet ef database update --no-build --project BookingService.Infrastructure --startup-project BookingService.Api
 
+      # PostgreSQL integration tests start their own disposable container through Testcontainers
+      # (Docker is available on ubuntu-latest), so they never receive the application connection string.
       - name: "run tests"
         env:
-          ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=bookingservice_db;Username=postgres;Password=postgres"
           ConnectionStrings__Redis: "localhost:6379"
         run: dotnet test --no-build --verbosity normal

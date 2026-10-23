@@ -4,10 +4,10 @@ using StackExchange.Redis;
 namespace BookingService.Infrastructure.Caching;
 
 /// <summary>
-/// Seat locks as Redis strings <c>booking:seat-lock:{ticketId} = {holder}</c> with a TTL.
+/// Event seat locks stored as Redis strings <c>booking:seat-lock:{eventSeatId} = {holderIdentifier}</c> with a TTL.
 /// Acquire and release run as Lua scripts, so the check and the write are one atomic step.
 /// </summary>
-public sealed class RedisSeatLockStore : ISeatLockStore
+public sealed class RedisSeatLockStore : IEventSeatLockStore
 {
     // Returns 1 when the lock was taken, 2 when the caller already held it (TTL renewed), 0 otherwise.
     private const string AcquireScript = """
@@ -35,51 +35,59 @@ public sealed class RedisSeatLockStore : ISeatLockStore
 
     public RedisSeatLockStore(IConnectionMultiplexer redis)
     {
+        ArgumentNullException.ThrowIfNull(redis);
         _redis = redis;
     }
 
-    public SeatLockResult TryAcquire(Guid ticketId, string holder, TimeSpan duration)
+    private IDatabase Database => _redis.GetDatabase();
+
+    public EventSeatLockResult TryAcquire(Guid eventSeatId, string holderIdentifier, TimeSpan duration)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
+        ArgumentException.ThrowIfNullOrWhiteSpace(holderIdentifier);
 
-        var outcome = (int)_redis.GetDatabase().ScriptEvaluate(
+        var outcome = (int)Database.ScriptEvaluate(
             AcquireScript,
-            [RedisKeys.SeatLock(ticketId)],
-            [holder, (long)duration.TotalMilliseconds]);
+            [RedisKeys.SeatLock(eventSeatId)],
+            [holderIdentifier, (long)duration.TotalMilliseconds]);
 
         return outcome switch
         {
-            1 => SeatLockResult.Acquired,
-            2 => SeatLockResult.Renewed,
-            _ => SeatLockResult.HeldByAnother
+            1 => EventSeatLockResult.Acquired,
+            2 => EventSeatLockResult.Renewed,
+            _ => EventSeatLockResult.HeldByAnother
         };
     }
 
-    public string? GetHolder(Guid ticketId)
+    public string? GetHolderIdentifier(Guid eventSeatId)
     {
-        var holder = _redis.GetDatabase().StringGet(RedisKeys.SeatLock(ticketId));
+        var holder = Database.StringGet(RedisKeys.SeatLock(eventSeatId));
         return holder.HasValue ? holder.ToString() : null;
     }
 
-    public IReadOnlySet<Guid> GetLockedTicketIds(IReadOnlyCollection<Guid> ticketIds)
+    public IReadOnlySet<Guid> GetLockedEventSeatIds(IReadOnlyCollection<Guid> eventSeatIds)
     {
-        if (ticketIds.Count == 0)
+        ArgumentNullException.ThrowIfNull(eventSeatIds);
+
+        if (eventSeatIds.Count == 0)
         {
             return new HashSet<Guid>();
         }
 
-        var ids = ticketIds.ToArray();
-        var holders = _redis.GetDatabase().StringGet(ids.Select(RedisKeys.SeatLock).ToArray());
+        var ids = eventSeatIds.ToArray();
+        var holders = Database.StringGet(ids.Select(RedisKeys.SeatLock).ToArray());
 
         return ids.Where((_, i) => holders[i].HasValue).ToHashSet();
     }
 
-    public bool Release(Guid ticketId, string holder)
+    public bool Release(Guid eventSeatId, string holderIdentifier)
     {
-        var deleted = (int)_redis.GetDatabase().ScriptEvaluate(
+        ArgumentException.ThrowIfNullOrWhiteSpace(holderIdentifier);
+
+        var deleted = (int)Database.ScriptEvaluate(
             ReleaseScript,
-            [RedisKeys.SeatLock(ticketId)],
-            [holder]);
+            [RedisKeys.SeatLock(eventSeatId)],
+            [holderIdentifier]);
 
         return deleted == 1;
     }
