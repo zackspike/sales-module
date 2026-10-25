@@ -314,17 +314,21 @@ public class PurchaseEventSeatHandlerTests
     }
 
     [Fact]
-    public async Task Post_commit_failure_is_logged_and_purchase_remains_successful()
+    public async Task Post_commit_failure_is_logged_and_does_not_skip_the_other_updates()
     {
         var seat = Seat();
+        var locks = BuyerLock(seat);
         var idempotency = new FakeIdempotencyStore { ThrowOnRemember = true };
+        var cache = new FakeAvailableEventSeatsCache();
         var logger = new FakeLogger();
 
-        var result = await Handler(new FakeEventSeatRepository(seat), BuyerLock(seat), idempotency, logger: logger)
+        var result = await Handler(new FakeEventSeatRepository(seat), locks, idempotency, logger: logger, cache: cache)
             .HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.Purchased, result.Status);
-        Assert.Contains(LogLevel.Warning, logger.Levels);
+        Assert.Equal([LogLevel.Warning], logger.Levels);
+        Assert.Null(locks.GetHolderIdentifier(seat.Id));
+        Assert.Equal(1, cache.InvalidateCalls);
     }
 
     [Fact]

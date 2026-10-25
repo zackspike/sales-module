@@ -166,28 +166,37 @@ public sealed class PurchaseEventSeatHandler
     }
 
     /// <summary>
-    /// Updates the hot-path stores once the sale is durable. Failures are only logged: the sale is
-    /// already committed, the lock and cache expire on their own, and replays fall back to the repository.
+    /// Updates the hot-path stores once the sale is durable. Each update is attempted independently and its
+    /// failure is only logged: the sale is already committed, the lock and cache expire on their own, and replays
+    /// fall back to the repository.
     /// Runs with <see cref="CancellationToken.None"/>, so a request cancelled after the commit still updates them.
     /// </summary>
     private async Task AfterPurchaseCommittedAsync(EventSeatSale sale, PurchaseEventSeatCommand command, string holder)
     {
+        await BestEffortAsync("idempotency", sale.Seat.Id, () => _idempotency.RememberAsync(
+            command.IdempotencyKey,
+            new IdempotencyRecord(command.EventId, sale.Seat.Id),
+            IdempotencyKeyRetention,
+            CancellationToken.None));
+        await BestEffortAsync("seat lock", sale.Seat.Id, () =>
+            _eventSeatLocks.ReleaseAsync(sale.Seat.Id, holder, CancellationToken.None));
+        await BestEffortAsync("available seats cache", sale.Seat.Id, () =>
+            _availableEventSeatsCache.InvalidateAsync(command.EventId, CancellationToken.None));
+    }
+
+    private async Task BestEffortAsync(string store, Guid eventSeatId, Func<Task> update)
+    {
         try
         {
-            await _idempotency.RememberAsync(
-                command.IdempotencyKey,
-                new IdempotencyRecord(command.EventId, sale.Seat.Id),
-                IdempotencyKeyRetention,
-                CancellationToken.None);
-            await _eventSeatLocks.ReleaseAsync(sale.Seat.Id, holder, CancellationToken.None);
-            await _availableEventSeatsCache.InvalidateAsync(command.EventId, CancellationToken.None);
+            await update();
         }
         catch (Exception exception)
         {
             _logger.LogWarning(
                 exception,
-                "Event seat {EventSeatId} was sold but the seat lock/idempotency/cache stores could not be updated.",
-                sale.Seat.Id);
+                "Event seat {EventSeatId} was sold but the {Store} store could not be updated.",
+                eventSeatId,
+                store);
         }
     }
 
