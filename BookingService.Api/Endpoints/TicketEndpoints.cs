@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using BookingService.Api.Contracts;
 using BookingService.Api.Middleware;
-using BookingService.Application.Tickets.Commands;
-using BookingService.Application.Tickets.Dtos;
-using BookingService.Application.Tickets.Queries;
+using BookingService.Application.EventSeats.Commands;
+using BookingService.Application.EventSeats.Queries;
+using BookingService.Application.EventSeats.ReadModels;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookingService.Api.Endpoints;
@@ -22,14 +22,14 @@ public static class TicketEndpoints
             .WithName("GetAvailableTickets")
             .WithSummary("List available seats for an event")
             .WithDescription("Returns all seats currently in 'Available' status and not reserved by a buyer for the specified event ID.")
-            .Produces<IReadOnlyList<SeatAvailabilityDto>>(StatusCodes.Status200OK)
+            .Produces<IReadOnlyList<AvailableEventSeat>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         tickets.MapGet("/{ticketId:guid}/availability", CheckTicketAvailability)
             .WithName("CheckTicketAvailability")
             .WithSummary("Check seat availability")
             .WithDescription("Checks whether a specific seat in an event is available, reserved or sold.")
-            .Produces<SeatAvailabilityDto>(StatusCodes.Status200OK)
+            .Produces<EventSeatAvailability>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         tickets.MapPost("/{ticketId:guid}/reserve", ReserveSeat)
@@ -64,8 +64,8 @@ public static class TicketEndpoints
     /// <param name="handler">Application query handler.</param>
     /// <response code="200">List of available seats successfully retrieved.</response>
     /// <response code="404">Event was not found.</response>
-    private static IResult GetAvailableTickets(Guid eventId, GetAvailableTicketsHandler handler) =>
-        handler.Handle(new GetAvailableTicketsQuery(eventId)) is { } seats
+    private static IResult GetAvailableTickets(Guid eventId, GetAvailableEventSeatsHandler handler) =>
+        handler.Handle(new GetAvailableEventSeatsQuery(eventId)) is { } seats
             ? Results.Ok(seats)
             : Results.NotFound();
 
@@ -77,8 +77,8 @@ public static class TicketEndpoints
     /// <param name="handler">Application query handler.</param>
     /// <response code="200">Seat availability status successfully retrieved.</response>
     /// <response code="404">Event or ticket was not found.</response>
-    private static IResult CheckTicketAvailability(Guid eventId, Guid ticketId, CheckTicketAvailabilityHandler handler) =>
-        handler.Handle(new CheckTicketAvailabilityQuery(eventId, ticketId)) is { } seat
+    private static IResult CheckTicketAvailability(Guid eventId, Guid ticketId, GetEventSeatAvailabilityHandler handler) =>
+        handler.Handle(new GetEventSeatAvailabilityQuery(eventId, ticketId)) is { } seat
             ? Results.Ok(seat)
             : Results.NotFound();
 
@@ -98,23 +98,23 @@ public static class TicketEndpoints
         Guid eventId,
         Guid ticketId,
         ReserveSeatRequest request,
-        ReserveSeatHandler handler)
+        ReserveEventSeatHandler handler)
     {
-        var result = handler.Handle(new ReserveSeatCommand(eventId, ticketId, request.FullName, request.Email));
+        var result = handler.Handle(new ReserveEventSeatCommand(eventId, ticketId, request.FullName, request.Email));
 
         return result.Status switch
         {
-            ReserveSeatStatus.Reserved => Results.Ok(new SeatReservationResponse(
-                result.Ticket!.Id,
+            ReserveEventSeatStatus.Reserved => Results.Ok(new SeatReservationResponse(
+                result.Seat!.EventSeatId,
                 eventId,
-                result.Ticket.SeatNumber,
+                result.Seat.SeatNumber,
                 request.Email.Trim(),
-                result.ExpiresAtUtc!.Value)),
-            ReserveSeatStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
-            ReserveSeatStatus.EventNotFound => Results.NotFound(new { error = $"Event '{eventId}' not found." }),
-            ReserveSeatStatus.TicketNotFound => Results.NotFound(new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." }),
-            ReserveSeatStatus.AlreadySold => Results.Conflict(new { error = "The requested seat has already been purchased." }),
-            ReserveSeatStatus.LockedByAnotherBuyer => Results.Conflict(new { error = "The requested seat is reserved by another buyer." }),
+                result.Seat.ExpiresAtUtc)),
+            ReserveEventSeatStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
+            ReserveEventSeatStatus.EventNotFound => Results.NotFound(new { error = $"Event '{eventId}' not found." }),
+            ReserveEventSeatStatus.EventSeatNotFound => Results.NotFound(new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." }),
+            ReserveEventSeatStatus.AlreadySold => Results.Conflict(new { error = "The requested seat has already been purchased." }),
+            ReserveEventSeatStatus.ReservedByAnotherBuyer => Results.Conflict(new { error = "The requested seat is reserved by another buyer." }),
             _ => throw new UnreachableException($"Unhandled reservation status '{result.Status}'.")
         };
     }
@@ -139,9 +139,9 @@ public static class TicketEndpoints
         Guid ticketId,
         PurchaseTicketRequest request,
         [FromHeader(Name = "X-Idempotency-Key")] Guid? idempotencyKey,
-        PurchaseTicketHandler handler)
+        PurchaseEventSeatHandler handler)
     {
-        var result = handler.Handle(new PurchaseTicketCommand(
+        var result = handler.Handle(new PurchaseEventSeatCommand(
             eventId,
             ticketId,
             request.FullName,
@@ -150,18 +150,27 @@ public static class TicketEndpoints
 
         return result.Status switch
         {
-            PurchaseTicketStatus.Purchased => Results.Created(
-                $"/events/{eventId}/tickets/{ticketId}/availability", TicketResponse.From(result.Ticket!)),
-            PurchaseTicketStatus.Replayed => Results.Ok(TicketResponse.From(result.Ticket!)),
-            PurchaseTicketStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
-            PurchaseTicketStatus.EventNotFound => Results.NotFound(new { error = $"Event '{eventId}' not found." }),
-            PurchaseTicketStatus.TicketNotFound => Results.NotFound(new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." }),
-            PurchaseTicketStatus.AlreadySold => Results.Conflict(new { error = "The requested seat has already been purchased." }),
-            PurchaseTicketStatus.IdempotencyKeyConflict => Results.Conflict(new { error = "X-Idempotency-Key was already used for a different seat." }),
-            PurchaseTicketStatus.ReservationRequired => Results.Json(
+            PurchaseEventSeatStatus.Purchased => Results.Created(
+                $"/events/{eventId}/tickets/{ticketId}/availability", ToTicketResponse(result.Ticket!)),
+            PurchaseEventSeatStatus.Replayed => Results.Ok(ToTicketResponse(result.Ticket!)),
+            PurchaseEventSeatStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
+            PurchaseEventSeatStatus.EventNotFound => Results.NotFound(new { error = $"Event '{eventId}' not found." }),
+            PurchaseEventSeatStatus.EventSeatNotFound => Results.NotFound(new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." }),
+            PurchaseEventSeatStatus.AlreadySold => Results.Conflict(new { error = "The requested seat has already been purchased." }),
+            PurchaseEventSeatStatus.IdempotencyKeyConflict => Results.Conflict(new { error = "X-Idempotency-Key was already used for a different seat." }),
+            PurchaseEventSeatStatus.ReservationRequired => Results.Json(
                 new { error = "The seat must be reserved by this buyer before purchasing it, or the reservation expired." },
                 statusCode: StatusCodes.Status403Forbidden),
             _ => throw new UnreachableException($"Unhandled purchase status '{result.Status}'.")
         };
     }
+
+    private static TicketResponse ToTicketResponse(IssuedTicket ticket) => new(
+        ticket.EventSeatId,
+        ticket.EventId,
+        ticket.SeatNumber,
+        ticket.HolderName,
+        ticket.HolderEmail,
+        ticket.TicketCode,
+        ticket.SoldAtUtc);
 }
