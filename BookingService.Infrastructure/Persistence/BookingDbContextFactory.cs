@@ -15,10 +15,11 @@ public sealed class BookingDbContextFactory : IDesignTimeDbContextFactory<Bookin
 
     public BookingDbContext CreateDbContext(string[] args)
     {
-        var connectionString =
-            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection"))
-                ? DefaultConnectionString
-                : Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")!;
+        var envConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+
+        var connectionString = string.IsNullOrWhiteSpace(envConnectionString)
+            ? DefaultConnectionString
+            : envConnectionString;
 
         var options = new DbContextOptionsBuilder<BookingDbContext>()
             .UseNpgsql(connectionString)
