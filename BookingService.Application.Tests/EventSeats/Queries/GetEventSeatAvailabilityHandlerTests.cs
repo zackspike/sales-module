@@ -17,7 +17,7 @@ public class GetEventSeatAvailabilityHandlerTests
     [InlineData(false, true, EventSeatAvailabilityStatus.Reserved)]
     [InlineData(true, false, EventSeatAvailabilityStatus.Sold)]
     [InlineData(true, true, EventSeatAvailabilityStatus.Sold)]
-    public void Returns_status_with_sold_winning_over_lock(
+    public async Task Returns_status_with_sold_winning_over_lock(
         bool sold,
         bool locked,
         EventSeatAvailabilityStatus expected)
@@ -34,7 +34,7 @@ public class GetEventSeatAvailabilityHandlerTests
             locks.TryAcquire(seat.Id, "holder", TimeSpan.FromMinutes(10));
         }
 
-        var result = Handler(seat, locks).Handle(new(EventId, seat.Id));
+        var result = await Handler(seat, locks).HandleAsync(new(EventId, seat.Id), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal(seat.Id, result.EventSeatId);
@@ -43,33 +43,33 @@ public class GetEventSeatAvailabilityHandlerTests
     }
 
     [Fact]
-    public void Unknown_event_returns_null()
+    public async Task Unknown_event_returns_null()
     {
         var seat = Seat();
 
-        var result = Handler(seat, new FakeEventSeatLockStore()).Handle(new(Guid.NewGuid(), seat.Id));
+        var result = await Handler(seat, new FakeEventSeatLockStore()).HandleAsync(new(Guid.NewGuid(), seat.Id), CancellationToken.None);
 
         Assert.Null(result);
     }
 
     [Fact]
-    public void Unknown_seat_returns_null()
+    public async Task Unknown_seat_returns_null()
     {
-        var result = Handler(Seat(), new FakeEventSeatLockStore()).Handle(new(EventId, Guid.NewGuid()));
+        var result = await Handler(Seat(), new FakeEventSeatLockStore()).HandleAsync(new(EventId, Guid.NewGuid()), CancellationToken.None);
 
         Assert.Null(result);
     }
 
     [Fact]
-    public void Missing_venue_seat_throws()
+    public async Task Missing_venue_seat_throws()
     {
         var seat = EventSeat.CreateAvailable(EventId, Guid.NewGuid(), ZoneId);
 
-        Assert.Throws<InvalidOperationException>(() => new GetEventSeatAvailabilityHandler(
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new GetEventSeatAvailabilityHandler(
             new FakeEventSeatRepository(seat),
             new FakeEventCatalog(EventId),
             new FakeEventSeatLockStore(),
-            new FakeVenueSeatCatalog()).Handle(new(EventId, seat.Id)));
+            new FakeVenueSeatCatalog()).HandleAsync(new(EventId, seat.Id), CancellationToken.None));
     }
 
     private static EventSeat Seat() => EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);

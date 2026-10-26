@@ -26,16 +26,17 @@ public sealed class FakeEventSeatRepository(params EventSeat[] initialSeats) : I
 
     public IReadOnlyCollection<EventSeat> Seats => _seats;
 
-    public IReadOnlyCollection<EventSeat> GetByEvent(Guid eventId)
+    public Task<IReadOnlyCollection<EventSeat>> GetByEventAsync(Guid eventId, CancellationToken cancellationToken)
     {
         lock (_sync)
         {
             GetByEventCalls++;
-            return _seats.Where(seat => seat.EventId == eventId).ToArray();
+            return Task.FromResult<IReadOnlyCollection<EventSeat>>(
+                _seats.Where(seat => seat.EventId == eventId).ToArray());
         }
     }
 
-    public EventSeat? GetById(Guid eventId, Guid eventSeatId)
+    public Task<EventSeat?> GetByIdAsync(Guid eventId, Guid eventSeatId, CancellationToken cancellationToken)
     {
         lock (_sync)
         {
@@ -48,33 +49,38 @@ public sealed class FakeEventSeatRepository(params EventSeat[] initialSeats) : I
                 AfterSecondRead?.Invoke(seat);
             }
 
-            return ReturnNullAfterSecondRead && GetByIdCalls == 2 ? null : seat;
+            return Task.FromResult(ReturnNullAfterSecondRead && GetByIdCalls == 2 ? null : seat);
         }
     }
 
-    public EventSeatSale? GetSaleByIdempotencyKey(Guid idempotencyKey, Guid eventId, Guid eventSeatId)
-    {
-        lock (_sync)
-        {
-            return _salesByKey.GetValueOrDefault(idempotencyKey) is { } sale
-                && sale.Seat.EventId == eventId
-                && sale.Seat.Id == eventSeatId
-                ? sale
-                : null;
-        }
-    }
-
-    public EventSeatSaleOutcome SellOnce(
+    public Task<EventSeatSale?> GetSaleByIdempotencyKeyAsync(
         Guid idempotencyKey,
         Guid eventId,
         Guid eventSeatId,
-        Func<EventSeat, Ticket> sell)
+        CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            return Task.FromResult(_salesByKey.GetValueOrDefault(idempotencyKey) is { } sale
+                && sale.Seat.EventId == eventId
+                && sale.Seat.Id == eventSeatId
+                ? sale
+                : null);
+        }
+    }
+
+    public Task<EventSeatSaleOutcome> SellOnceAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        Func<EventSeat, Ticket> sell,
+        CancellationToken cancellationToken)
     {
         lock (_sync)
         {
             if (_salesByKey.TryGetValue(idempotencyKey, out var replay))
             {
-                return new EventSeatSaleOutcome(replay, true);
+                return Task.FromResult(new EventSeatSaleOutcome(replay, true));
             }
 
             if (RemoveSeatBeforeSellOnce)
@@ -87,7 +93,7 @@ public sealed class FakeEventSeatRepository(params EventSeat[] initialSeats) : I
                 candidate.EventId == eventId && candidate.Id == eventSeatId);
             if (seat is null)
             {
-                return new EventSeatSaleOutcome(null, false);
+                return Task.FromResult(new EventSeatSaleOutcome(null, false));
             }
 
             if (ThrowAlreadySold)
@@ -97,7 +103,7 @@ public sealed class FakeEventSeatRepository(params EventSeat[] initialSeats) : I
 
             var sale = new EventSeatSale(seat, sell(seat));
             _salesByKey[idempotencyKey] = sale;
-            return new EventSeatSaleOutcome(sale, false);
+            return Task.FromResult(new EventSeatSaleOutcome(sale, false));
         }
     }
 

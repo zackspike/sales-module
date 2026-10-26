@@ -11,10 +11,12 @@ public interface IVenueSeatCatalog
     /// <summary>
     /// Returns the venue seat with the given id, or null if it does not exist.
     /// </summary>
-    VenueSeat? GetById(Guid venueSeatId);
+    Task<VenueSeat?> GetByIdAsync(Guid venueSeatId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Returns the venue seats with the given ids. If a seat does not exist, it is not included in the result.
     /// </summary>
-    IReadOnlyCollection<VenueSeat> GetByIds(IReadOnlyCollection<Guid> venueSeatIds);
+    Task<IReadOnlyCollection<VenueSeat>> GetByIdsAsync(
+        IReadOnlyCollection<Guid> venueSeatIds,
+        CancellationToken cancellationToken);
 }

@@ -28,7 +28,9 @@ public sealed class ReserveEventSeatHandler
         _eventSeatLocks = eventSeatLocks;
     }
 
-    public ReserveEventSeatResult Handle(ReserveEventSeatCommand command)
+    public async Task<ReserveEventSeatResult> HandleAsync(
+        ReserveEventSeatCommand command,
+        CancellationToken cancellationToken)
     {
         var errors = TicketHolderValidator.Validate(command.FullName, command.Email);
         if (errors.Count > 0)
@@ -36,12 +38,12 @@ public sealed class ReserveEventSeatHandler
             return ReserveEventSeatResult.Invalid(errors);
         }
 
-        if (!_eventCatalog.Exists(command.EventId))
+        if (!await _eventCatalog.ExistsAsync(command.EventId, cancellationToken))
         {
             return ReserveEventSeatResult.Failed(ReserveEventSeatStatus.EventNotFound);
         }
 
-        var eventSeat = _eventSeatRepository.GetById(command.EventId, command.EventSeatId);
+        var eventSeat = await _eventSeatRepository.GetByIdAsync(command.EventId, command.EventSeatId, cancellationToken);
         if (eventSeat is null)
         {
             return ReserveEventSeatResult.Failed(ReserveEventSeatStatus.EventSeatNotFound);
@@ -53,36 +55,41 @@ public sealed class ReserveEventSeatHandler
         }
 
         // Resolved before locking, so a seat with broken venue data is never left reserved.
-        var seatNumber = SeatNumberOf(eventSeat);
+        var seatNumber = await SeatNumberOfAsync(eventSeat, cancellationToken);
 
         var holder = EventSeatLockHolder.From(command.Email);
         var expiresAtUtc = DateTime.UtcNow + EventSeatReservationPolicy.Duration;
 
-        if (_eventSeatLocks.TryAcquire(eventSeat.Id, holder, EventSeatReservationPolicy.Duration) == EventSeatLockResult.HeldByAnother)
+        var lockResult = await _eventSeatLocks.TryAcquireAsync(
+            eventSeat.Id,
+            holder,
+            EventSeatReservationPolicy.Duration,
+            cancellationToken);
+        if (lockResult == EventSeatLockResult.HeldByAnother)
         {
             return ReserveEventSeatResult.Failed(ReserveEventSeatStatus.ReservedByAnotherBuyer);
         }
 
         // The seat may have been sold (and its lock released) between the availability check
         // and the lock: re-check so a sold seat is never left reserved.
-        var current = _eventSeatRepository.GetById(command.EventId, command.EventSeatId);
+        var current = await _eventSeatRepository.GetByIdAsync(command.EventId, command.EventSeatId, cancellationToken);
         if (current is null)
         {
-            _eventSeatLocks.Release(eventSeat.Id, holder);
+            await _eventSeatLocks.ReleaseAsync(eventSeat.Id, holder, cancellationToken);
             return ReserveEventSeatResult.Failed(ReserveEventSeatStatus.EventSeatNotFound);
         }
 
         if (current.Status == EventSeatStatus.Sold)
         {
-            _eventSeatLocks.Release(eventSeat.Id, holder);
+            await _eventSeatLocks.ReleaseAsync(eventSeat.Id, holder, cancellationToken);
             return ReserveEventSeatResult.Failed(ReserveEventSeatStatus.AlreadySold);
         }
 
         return ReserveEventSeatResult.Reserved(new ReservedEventSeat(current.Id, current.EventId, seatNumber, expiresAtUtc));
     }
 
-    private string SeatNumberOf(EventSeat eventSeat) =>
-        _venueSeatCatalog.GetById(eventSeat.VenueSeatId)?.SeatNumber
+    private async Task<string> SeatNumberOfAsync(EventSeat eventSeat, CancellationToken cancellationToken) =>
+        (await _venueSeatCatalog.GetByIdAsync(eventSeat.VenueSeatId, cancellationToken))?.SeatNumber
             ?? throw new InvalidOperationException(
                 $"Event seat {eventSeat.Id} references venue seat {eventSeat.VenueSeatId}, which is not in the catalog.");
 }
