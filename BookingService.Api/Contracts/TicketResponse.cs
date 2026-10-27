@@ -1,4 +1,5 @@
-using BookingService.Domain.Tickets;
+using System.Text.Json.Serialization;
+using BookingService.Application.EventSeats.ReadModels;
 
 namespace BookingService.Api.Contracts;
 
@@ -19,14 +20,15 @@ public sealed record TicketResponse(
     string FullName,
     string Email,
     string TicketCode,
+    [property: JsonPropertyName("createdAt")]
     DateTime? PurchasedAtUtc)
 {
-    public static TicketResponse From(Ticket ticket) => new(
-        ticket.Id,
+    public static TicketResponse From(IssuedTicket ticket) => new(
+        ticket.EventSeatId,
         ticket.EventId,
         ticket.SeatNumber,
-        ticket.FullName,
-        ticket.Email,
+        ticket.HolderName,
+        ticket.HolderEmail,
         ticket.TicketCode,
-        ticket.PurchasedAtUtc);
+        ticket.SoldAtUtc);
 }
