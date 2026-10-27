@@ -28,5 +28,6 @@ public class InMemoryEventCatalog : IEventCatalog
         _events.TryAdd(DefaultEvent.Id, DefaultEvent);
     }
 
-    public bool Exists(Guid eventId) => _events.ContainsKey(eventId);
+    public Task<bool> ExistsAsync(Guid eventId, CancellationToken cancellationToken) =>
+        Task.FromResult(_events.ContainsKey(eventId));
 }

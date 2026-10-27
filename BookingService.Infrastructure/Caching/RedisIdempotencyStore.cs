@@ -19,9 +19,11 @@ public sealed class RedisIdempotencyStore : IIdempotencyStore
 
     private IDatabase Database => _redis.GetDatabase();
 
-    public IdempotencyRecord? GetIdempotencyRecord(Guid idempotencyKey)
+    public async Task<IdempotencyRecord?> GetIdempotencyRecordAsync(
+        Guid idempotencyKey,
+        CancellationToken cancellationToken)
     {
-        var value = Database.StringGet(RedisKeys.Idempotency(idempotencyKey));
+        var value = await Database.StringGetAsync(RedisKeys.Idempotency(idempotencyKey));
         if (value.IsNullOrEmpty)
         {
             return null;
@@ -37,13 +39,17 @@ public sealed class RedisIdempotencyStore : IIdempotencyStore
         }
     }
 
-    public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention)
+    public async Task RememberAsync(
+        Guid idempotencyKey,
+        IdempotencyRecord record,
+        TimeSpan retention,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retention, TimeSpan.Zero);
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(record);
-        Database.StringSet(
+        await Database.StringSetAsync(
             RedisKeys.Idempotency(idempotencyKey),
             bytes,
             retention);

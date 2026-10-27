@@ -9,19 +9,33 @@ namespace BookingService.Infrastructure.Caching;
 /// </summary>
 public sealed class NoCache : IIdempotencyStore, IAvailableEventSeatsCache
 {
-    public IdempotencyRecord? GetIdempotencyRecord(Guid idempotencyKey) => null;
+    public Task<IdempotencyRecord?> GetIdempotencyRecordAsync(
+        Guid idempotencyKey,
+        CancellationToken cancellationToken) => Task.FromResult<IdempotencyRecord?>(null);
 
-    public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention)
+    public Task RememberAsync(
+        Guid idempotencyKey,
+        IdempotencyRecord record,
+        TimeSpan retention,
+        CancellationToken cancellationToken)
     {
+        return Task.CompletedTask;
     }
 
-    public IReadOnlyList<AvailableEventSeat>? Get(Guid eventId) => null;
+    public Task<IReadOnlyList<AvailableEventSeat>?> GetAsync(
+        Guid eventId,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<AvailableEventSeat>?>(null);
 
-    public void Set(Guid eventId, IReadOnlyList<AvailableEventSeat> seats)
+    public Task SetAsync(
+        Guid eventId,
+        IReadOnlyList<AvailableEventSeat> seats,
+        CancellationToken cancellationToken)
     {
+        return Task.CompletedTask;
     }
 
-    public void Invalidate(Guid eventId)
+    public Task InvalidateAsync(Guid eventId, CancellationToken cancellationToken)
     {
+        return Task.CompletedTask;
     }
 }

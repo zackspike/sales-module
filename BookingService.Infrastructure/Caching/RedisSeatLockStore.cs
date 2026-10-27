@@ -41,12 +41,16 @@ public sealed class RedisSeatLockStore : IEventSeatLockStore
 
     private IDatabase Database => _redis.GetDatabase();
 
-    public EventSeatLockResult TryAcquire(Guid eventSeatId, string holderIdentifier, TimeSpan duration)
+    public async Task<EventSeatLockResult> TryAcquireAsync(
+        Guid eventSeatId,
+        string holderIdentifier,
+        TimeSpan duration,
+        CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
         ArgumentException.ThrowIfNullOrWhiteSpace(holderIdentifier);
 
-        var outcome = (int)Database.ScriptEvaluate(
+        var outcome = (int)await Database.ScriptEvaluateAsync(
             AcquireScript,
             [RedisKeys.SeatLock(eventSeatId)],
             [holderIdentifier, (long)duration.TotalMilliseconds]);
@@ -59,13 +63,15 @@ public sealed class RedisSeatLockStore : IEventSeatLockStore
         };
     }
 
-    public string? GetHolderIdentifier(Guid eventSeatId)
+    public async Task<string?> GetHolderIdentifierAsync(Guid eventSeatId, CancellationToken cancellationToken)
     {
-        var holder = Database.StringGet(RedisKeys.SeatLock(eventSeatId));
+        var holder = await Database.StringGetAsync(RedisKeys.SeatLock(eventSeatId));
         return holder.HasValue ? holder.ToString() : null;
     }
 
-    public IReadOnlySet<Guid> GetLockedEventSeatIds(IReadOnlyCollection<Guid> eventSeatIds)
+    public async Task<IReadOnlySet<Guid>> GetLockedEventSeatIdsAsync(
+        IReadOnlyCollection<Guid> eventSeatIds,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(eventSeatIds);
 
@@ -75,16 +81,19 @@ public sealed class RedisSeatLockStore : IEventSeatLockStore
         }
 
         var ids = eventSeatIds.ToArray();
-        var holders = Database.StringGet(ids.Select(RedisKeys.SeatLock).ToArray());
+        var holders = await Database.StringGetAsync(ids.Select(RedisKeys.SeatLock).ToArray());
 
         return ids.Where((_, i) => holders[i].HasValue).ToHashSet();
     }
 
-    public bool Release(Guid eventSeatId, string holderIdentifier)
+    public async Task<bool> ReleaseAsync(
+        Guid eventSeatId,
+        string holderIdentifier,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(holderIdentifier);
 
-        var deleted = (int)Database.ScriptEvaluate(
+        var deleted = (int)await Database.ScriptEvaluateAsync(
             ReleaseScript,
             [RedisKeys.SeatLock(eventSeatId)],
             [holderIdentifier]);

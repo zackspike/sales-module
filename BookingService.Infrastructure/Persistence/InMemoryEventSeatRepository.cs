@@ -36,49 +36,66 @@ public sealed class InMemoryEventSeatRepository : IEventSeatRepository
         }
     }
 
-    public IReadOnlyCollection<EventSeat> GetByEvent(Guid eventId)
+    public Task<IReadOnlyCollection<EventSeat>> GetByEventAsync(
+        Guid eventId,
+        CancellationToken cancellationToken)
     {
         lock (_lock)
         {
-            return _seatsByEvent.TryGetValue(eventId, out var eventSeats)
-                ? eventSeats.Values.ToList()
-                : [];
+            return Task.FromResult<IReadOnlyCollection<EventSeat>>(
+                _seatsByEvent.TryGetValue(eventId, out var eventSeats)
+                    ? eventSeats.Values.ToList()
+                    : []);
         }
     }
 
-    public EventSeat? GetById(Guid eventId, Guid eventSeatId)
+    public Task<EventSeat?> GetByIdAsync(
+        Guid eventId,
+        Guid eventSeatId,
+        CancellationToken cancellationToken)
     {
         lock (_lock)
         {
-            return _seatsByEvent.TryGetValue(eventId, out var eventSeats)
-                && eventSeats.TryGetValue(eventSeatId, out var eventSeat)
-                    ? eventSeat
-                    : null;
+            return Task.FromResult(
+                _seatsByEvent.TryGetValue(eventId, out var eventSeats)
+                    && eventSeats.TryGetValue(eventSeatId, out var eventSeat)
+                        ? eventSeat
+                        : null);
         }
     }
 
-    public EventSeatSale? GetSaleByIdempotencyKey(Guid idempotencyKey, Guid eventId, Guid eventSeatId)
+    public Task<EventSeatSale?> GetSaleByIdempotencyKeyAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        CancellationToken cancellationToken)
     {
         lock (_lock)
         {
             if (!_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var ticketId))
             {
-                return null;
+                return Task.FromResult<EventSeatSale?>(null);
             }
 
             // A key used for another seat did not buy this one.
             if (!_ticketsById.TryGetValue(ticketId, out var ticket) || ticket.EventSeatId != eventSeatId)
             {
-                return null;
+                return Task.FromResult<EventSeatSale?>(null);
             }
 
-            return _seatsById.TryGetValue(eventSeatId, out var seat) && seat.EventId == eventId
-                ? new EventSeatSale(seat, ticket)
-                : null;
+            return Task.FromResult(
+                _seatsById.TryGetValue(eventSeatId, out var seat) && seat.EventId == eventId
+                    ? new EventSeatSale(seat, ticket)
+                    : null);
         }
     }
 
-    public EventSeatSaleOutcome SellOnce(Guid idempotencyKey, Guid eventId, Guid eventSeatId, Func<EventSeat, Ticket> sell)
+    public Task<EventSeatSaleOutcome> SellOnceAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        Func<EventSeat, Ticket> sell,
+        CancellationToken cancellationToken)
     {
         lock (_lock)
         {
@@ -88,7 +105,7 @@ public sealed class InMemoryEventSeatRepository : IEventSeatRepository
             if (_ticketIdsByIdempotencyKey.TryGetValue(idempotencyKey, out var existingTicketId))
             {
                 var existingTicket = _ticketsById[existingTicketId];
-                return new EventSeatSaleOutcome(ToSale(existingTicket), Replayed: true);
+                return Task.FromResult(new EventSeatSaleOutcome(ToSale(existingTicket), Replayed: true));
             }
 
             var seat = _seatsByEvent.TryGetValue(eventId, out var eventSeats)
@@ -96,7 +113,7 @@ public sealed class InMemoryEventSeatRepository : IEventSeatRepository
                 : null;
             if (seat is null)
             {
-                return new EventSeatSaleOutcome(null, Replayed: false);
+                return Task.FromResult(new EventSeatSaleOutcome(null, Replayed: false));
             }
 
             var ticket = sell(seat);
@@ -106,7 +123,7 @@ public sealed class InMemoryEventSeatRepository : IEventSeatRepository
                 _ticketIdsByIdempotencyKey[idempotencyKey] = ticket.Id;
             }
 
-            return new EventSeatSaleOutcome(new EventSeatSale(seat, ticket), Replayed: false);
+            return Task.FromResult(new EventSeatSaleOutcome(new EventSeatSale(seat, ticket), Replayed: false));
         }
     }
 
