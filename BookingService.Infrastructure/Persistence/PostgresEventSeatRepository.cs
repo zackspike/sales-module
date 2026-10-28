@@ -18,37 +18,48 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
         _dbContext = dbContext;
     }
 
-    public IReadOnlyCollection<EventSeat> GetByEvent(Guid eventId)
+    public async Task<IReadOnlyCollection<EventSeat>> GetByEventAsync(
+        Guid eventId,
+        CancellationToken cancellationToken)
     {
-        return _dbContext.EventSeats
+        return await _dbContext.EventSeats
             .AsNoTracking()
             .Where(s => s.EventId == eventId)
-            .ToList();
+            .ToListAsync(cancellationToken);
     }
 
-    public EventSeat? GetById(Guid eventId, Guid eventSeatId)
+    public Task<EventSeat?> GetByIdAsync(
+        Guid eventId,
+        Guid eventSeatId,
+        CancellationToken cancellationToken)
     {
         return _dbContext.EventSeats
             .AsNoTracking()
-            .FirstOrDefault(s => s.EventId == eventId && s.Id == eventSeatId);
+            .FirstOrDefaultAsync(
+                s => s.EventId == eventId && s.Id == eventSeatId,
+                cancellationToken);
     }
 
-    public EventSeatSale? GetSaleByIdempotencyKey(Guid idempotencyKey, Guid eventId, Guid eventSeatId)
+    public async Task<EventSeatSale?> GetSaleByIdempotencyKeyAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        CancellationToken cancellationToken)
     {
         if (idempotencyKey == Guid.Empty)
         {
             return null;
         }
 
-        var ticket = FindTicketByKey(idempotencyKey, asNoTracking: true);
+        var ticket = await FindTicketByKeyAsync(idempotencyKey, asNoTracking: true, cancellationToken);
         if (ticket is null)
         {
             return null;
         }
 
-        var seat = _dbContext.EventSeats
+        var seat = await _dbContext.EventSeats
             .AsNoTracking()
-            .FirstOrDefault(s => s.Id == ticket.EventSeatId);
+            .FirstOrDefaultAsync(s => s.Id == ticket.EventSeatId, cancellationToken);
 
         if (seat is null || seat.EventId != eventId || seat.Id != eventSeatId)
         {
@@ -58,19 +69,31 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
         return new EventSeatSale(seat, ticket);
     }
 
-    public EventSeatSaleOutcome SellOnce(Guid idempotencyKey, Guid eventId, Guid eventSeatId, Func<EventSeat, Ticket> sell)
+    public async Task<EventSeatSaleOutcome> SellOnceAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        Func<EventSeat, Ticket> sell,
+        CancellationToken cancellationToken)
     {
         if (idempotencyKey != Guid.Empty)
         {
-            var existingTicket = FindTicketByKey(idempotencyKey, asNoTracking: false);
+            var existingTicket = await FindTicketByKeyAsync(
+                idempotencyKey,
+                asNoTracking: false,
+                cancellationToken);
             if (existingTicket is not null)
             {
-                return new EventSeatSaleOutcome(LoadSale(existingTicket), Replayed: true);
+                return new EventSeatSaleOutcome(
+                    await LoadSaleAsync(existingTicket, cancellationToken),
+                    Replayed: true);
             }
         }
 
-        var seat = _dbContext.EventSeats
-            .FirstOrDefault(s => s.EventId == eventId && s.Id == eventSeatId);
+        var seat = await _dbContext.EventSeats
+            .FirstOrDefaultAsync(
+                s => s.EventId == eventId && s.Id == eventSeatId,
+                cancellationToken);
 
         if (seat is null)
         {
@@ -85,7 +108,7 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
         catch (EventSeatAlreadySoldException)
         {
             // Another buyer committed between the idempotency key lookup and the seat read.
-            return ReplayOrAlreadySold(idempotencyKey, eventSeatId);
+            return await ReplayOrAlreadySoldAsync(idempotencyKey, eventSeatId, cancellationToken);
         }
 
         if (idempotencyKey != Guid.Empty)
@@ -99,20 +122,22 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
             // xmin token: 0 rows updated if another buyer sold the seat first.
             // Unique index on EventSeatId: another buyer's ticket for this seat was committed first.
             // Unique index on IdempotencyKey: the same key won a race on another seat.
-            _dbContext.SaveChanges();
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
             _dbContext.ChangeTracker.Clear();
-            return ReplayOrAlreadySold(idempotencyKey, eventSeatId);
+            return await ReplayOrAlreadySoldAsync(idempotencyKey, eventSeatId, cancellationToken);
         }
         catch (DbUpdateException exception)
         {
             _dbContext.ChangeTracker.Clear();
-            var winner = FindTicketByKey(idempotencyKey, asNoTracking: true);
+            var winner = await FindTicketByKeyAsync(idempotencyKey, asNoTracking: true, cancellationToken);
             if (winner is not null)
             {
-                return new EventSeatSaleOutcome(LoadSale(winner), Replayed: true);
+                return new EventSeatSaleOutcome(
+                    await LoadSaleAsync(winner, cancellationToken),
+                    Replayed: true);
             }
 
             if (exception.InnerException is PostgresException
@@ -130,26 +155,38 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
         return new EventSeatSaleOutcome(new EventSeatSale(seat, ticket), Replayed: false);
     }
 
-    private EventSeatSaleOutcome ReplayOrAlreadySold(Guid idempotencyKey, Guid eventSeatId)
+    private async Task<EventSeatSaleOutcome> ReplayOrAlreadySoldAsync(
+        Guid idempotencyKey,
+        Guid eventSeatId,
+        CancellationToken cancellationToken)
     {
-        var winner = FindTicketByKey(idempotencyKey, asNoTracking: true);
+        var winner = await FindTicketByKeyAsync(idempotencyKey, asNoTracking: true, cancellationToken);
         if (winner is not null)
         {
-            return new EventSeatSaleOutcome(LoadSale(winner), Replayed: true);
+            return new EventSeatSaleOutcome(
+                await LoadSaleAsync(winner, cancellationToken),
+                Replayed: true);
         }
 
         throw new EventSeatAlreadySoldException(eventSeatId);
     }
 
-    private Ticket? FindTicketByKey(Guid idempotencyKey, bool asNoTracking)
+    private Task<Ticket?> FindTicketByKeyAsync(
+        Guid idempotencyKey,
+        bool asNoTracking,
+        CancellationToken cancellationToken)
     {
         var query = _dbContext.Tickets.Where(t => EF.Property<Guid>(t, IdempotencyKeyPropertyName) == idempotencyKey);
-        return asNoTracking ? query.AsNoTracking().FirstOrDefault() : query.FirstOrDefault();
+        return asNoTracking
+            ? query.AsNoTracking().FirstOrDefaultAsync(cancellationToken)
+            : query.FirstOrDefaultAsync(cancellationToken);
     }
 
-    private EventSeatSale LoadSale(Ticket ticket)
+    private async Task<EventSeatSale> LoadSaleAsync(Ticket ticket, CancellationToken cancellationToken)
     {
-        var seat = _dbContext.EventSeats.AsNoTracking().First(s => s.Id == ticket.EventSeatId);
+        var seat = await _dbContext.EventSeats
+            .AsNoTracking()
+            .FirstAsync(s => s.Id == ticket.EventSeatId, cancellationToken);
         return new EventSeatSale(seat, ticket);
     }
 }

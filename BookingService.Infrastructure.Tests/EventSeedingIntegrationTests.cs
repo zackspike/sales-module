@@ -6,7 +6,7 @@ namespace BookingService.Infrastructure.Tests;
 public class EventSeedingIntegrationTests
 {
     [Fact]
-    public void Event_catalog_and_seat_repository_seed_consistent_inventory()
+    public async Task Event_catalog_and_seat_repository_seed_consistent_inventory()
     {
         // Arrange & Act (APP-03 / DOM-03)
         var catalog = new InMemoryEventCatalog();
@@ -15,7 +15,7 @@ public class EventSeedingIntegrationTests
         var defaultEvent = InMemoryEventCatalog.DefaultEvent;
 
         // Assert: Event exists in catalog with contract specification (ALIGN-01)
-        Assert.True(catalog.Exists(defaultEvent.Id));
+        Assert.True(await catalog.ExistsAsync(defaultEvent.Id, CancellationToken.None));
         var fetchedEvent = InMemoryEventCatalog.DefaultEvent;
         Assert.NotNull(fetchedEvent);
         Assert.Equal("Rock Fest 2026", fetchedEvent.Name);
@@ -30,7 +30,7 @@ public class EventSeedingIntegrationTests
         Assert.All(venueSeats, vs => Assert.Equal(InMemoryVenueSeatCatalog.DefaultZoneId, vs.ZoneId));
 
         // Assert: Event seats exist in repository matching the venue seats (DOM-03 / APP-03)
-        var seats = repository.GetByEvent(defaultEvent.Id);
+        var seats = await repository.GetByEventAsync(defaultEvent.Id, CancellationToken.None);
         Assert.Equal(venueSeats.Count, seats.Count);
         Assert.Equal(venueSeats.Select(vs => vs.Id).Order(), seats.Select(s => s.VenueSeatId).Order());
 

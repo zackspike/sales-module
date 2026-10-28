@@ -36,19 +36,22 @@ public sealed class InMemoryVenueSeatCatalog : IVenueSeatCatalog
             $"A-{n}"))
         .ToList();
 
-    public VenueSeat? GetById(Guid venueSeatId) =>
-        _venueSeats.TryGetValue(venueSeatId, out var venueSeat) ? venueSeat : null;
+    public Task<VenueSeat?> GetByIdAsync(Guid venueSeatId, CancellationToken cancellationToken) =>
+        Task.FromResult(_venueSeats.TryGetValue(venueSeatId, out var venueSeat) ? venueSeat : null);
 
-    public IReadOnlyCollection<VenueSeat> GetByIds(IReadOnlyCollection<Guid> venueSeatIds)
+    public Task<IReadOnlyCollection<VenueSeat>> GetByIdsAsync(
+        IReadOnlyCollection<Guid> venueSeatIds,
+        CancellationToken cancellationToken)
     {
         if (venueSeatIds.Count == 0)
         {
-            return [];
+            return Task.FromResult<IReadOnlyCollection<VenueSeat>>([]);
         }
 
-        return venueSeatIds
-            .Where(_venueSeats.ContainsKey)
-            .Select(id => _venueSeats[id])
-            .ToList();
+        return Task.FromResult<IReadOnlyCollection<VenueSeat>>(
+            venueSeatIds
+                .Where(_venueSeats.ContainsKey)
+                .Select(id => _venueSeats[id])
+                .ToList());
     }
 }

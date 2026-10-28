@@ -17,7 +17,11 @@ public sealed class InMemorySeatLockStore : IEventSeatLockStore
         _clock = clock ?? TimeProvider.System;
     }
 
-    public EventSeatLockResult TryAcquire(Guid eventSeatId, string holderIdentifier, TimeSpan duration)
+    public Task<EventSeatLockResult> TryAcquireAsync(
+        Guid eventSeatId,
+        string holderIdentifier,
+        TimeSpan duration,
+        CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
         ArgumentException.ThrowIfNullOrWhiteSpace(holderIdentifier);
@@ -27,44 +31,50 @@ public sealed class InMemorySeatLockStore : IEventSeatLockStore
             var current = CurrentHolder(eventSeatId);
             if (current is not null && current != holderIdentifier)
             {
-                return EventSeatLockResult.HeldByAnother;
+                return Task.FromResult(EventSeatLockResult.HeldByAnother);
             }
 
             _locks[eventSeatId] = new LockEntry(holderIdentifier, _clock.GetUtcNow() + duration);
-            return current is null ? EventSeatLockResult.Acquired : EventSeatLockResult.Renewed;
+            return Task.FromResult(current is null ? EventSeatLockResult.Acquired : EventSeatLockResult.Renewed);
         }
     }
 
-    public string? GetHolderIdentifier(Guid eventSeatId)
+    public Task<string?> GetHolderIdentifierAsync(Guid eventSeatId, CancellationToken cancellationToken)
     {
         lock (_lock)
         {
-            return CurrentHolder(eventSeatId);
+            return Task.FromResult(CurrentHolder(eventSeatId));
         }
     }
 
-    public IReadOnlySet<Guid> GetLockedEventSeatIds(IReadOnlyCollection<Guid> eventSeatIds)
+    public Task<IReadOnlySet<Guid>> GetLockedEventSeatIdsAsync(
+        IReadOnlyCollection<Guid> eventSeatIds,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(eventSeatIds);
 
         if (eventSeatIds.Count == 0)
         {
-            return new HashSet<Guid>();
+            return Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
         }
 
         lock (_lock)
         {
-            return eventSeatIds.Where(id => CurrentHolder(id) is not null).ToHashSet();
+            return Task.FromResult<IReadOnlySet<Guid>>(
+                eventSeatIds.Where(id => CurrentHolder(id) is not null).ToHashSet());
         }
     }
 
-    public bool Release(Guid eventSeatId, string holderIdentifier)
+    public Task<bool> ReleaseAsync(
+        Guid eventSeatId,
+        string holderIdentifier,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(holderIdentifier);
 
         lock (_lock)
         {
-            return CurrentHolder(eventSeatId) == holderIdentifier && _locks.Remove(eventSeatId);
+            return Task.FromResult(CurrentHolder(eventSeatId) == holderIdentifier && _locks.Remove(eventSeatId));
         }
     }
 

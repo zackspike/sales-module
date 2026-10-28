@@ -24,9 +24,11 @@ public sealed class RedisAvailableSeatsCache : IAvailableEventSeatsCache
 
     private IDatabase Database => _redis.GetDatabase();
 
-    public IReadOnlyList<AvailableEventSeat>? Get(Guid eventId)
+    public async Task<IReadOnlyList<AvailableEventSeat>?> GetAsync(
+        Guid eventId,
+        CancellationToken cancellationToken)
     {
-        var value = Database.StringGet(RedisKeys.AvailableSeats(eventId));
+        var value = await Database.StringGetAsync(RedisKeys.AvailableSeats(eventId));
         if (value.IsNullOrEmpty)
         {
             return null;
@@ -42,15 +44,18 @@ public sealed class RedisAvailableSeatsCache : IAvailableEventSeatsCache
         }
     }
 
-    public void Set(Guid eventId, IReadOnlyList<AvailableEventSeat> seats)
+    public async Task SetAsync(
+        Guid eventId,
+        IReadOnlyList<AvailableEventSeat> seats,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(seats);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(seats);
-        Database.StringSet(RedisKeys.AvailableSeats(eventId), bytes, TimeToLive);
+        await Database.StringSetAsync(RedisKeys.AvailableSeats(eventId), bytes, TimeToLive);
     }
 
-    public void Invalidate(Guid eventId)
+    public async Task InvalidateAsync(Guid eventId, CancellationToken cancellationToken)
     {
-        Database.KeyDelete(RedisKeys.AvailableSeats(eventId));
+        await Database.KeyDeleteAsync(RedisKeys.AvailableSeats(eventId));
     }
 }
