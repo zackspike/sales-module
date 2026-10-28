@@ -73,7 +73,7 @@ public class RedisStoreTests
             "a",
             TimeSpan.FromMilliseconds(200),
             CancellationToken.None);
-        Thread.Sleep(400);
+        await Task.Delay(400);
         Assert.Null(await locks.GetHolderIdentifierAsync(_eventSeatId, CancellationToken.None));
 
         await locks.TryAcquireAsync(_eventSeatId, "a", Duration, CancellationToken.None);

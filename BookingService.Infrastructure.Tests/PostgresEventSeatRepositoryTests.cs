@@ -84,13 +84,8 @@ public sealed class PostgresEventSeatRepositoryTests : IDisposable
                 CancellationToken.None);
         }
 
-        var tasks = new Task<PurchaseEventSeatStatus>[buyers];
-        Parallel.For(0, buyers, new ParallelOptions { MaxDegreeOfParallelism = buyers }, index =>
-        {
-            tasks[index] = RunPurchaseAsync(command(index), locks);
-        });
-
-        return await Task.WhenAll(tasks);
+        return await Task.WhenAll(
+            Enumerable.Range(0, buyers).Select(i => RunPurchaseAsync(command(i), locks)));
     }
 
     private async Task<PurchaseEventSeatStatus> RunPurchaseAsync(
