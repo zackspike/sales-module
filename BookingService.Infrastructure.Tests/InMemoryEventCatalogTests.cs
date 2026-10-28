@@ -8,14 +8,18 @@ public class InMemoryEventCatalogTests
     private readonly InMemoryEventCatalog _catalog = new();
 
     [Fact]
-    public void Known_event_exists()
+    public async Task Known_event_exists()
     {
-        Assert.True(_catalog.Exists(InMemoryEventCatalog.DefaultEvent.Id));
+        Assert.True(await _catalog.ExistsAsync(
+            InMemoryEventCatalog.DefaultEvent.Id,
+            CancellationToken.None));
     }
 
     [Fact]
-    public void Unknown_event_does_not_exist()
+    public async Task Unknown_event_does_not_exist()
     {
-        Assert.False(_catalog.Exists(Guid.NewGuid()));
+        Assert.False(await _catalog.ExistsAsync(
+            Guid.NewGuid(),
+            CancellationToken.None));
     }
 }

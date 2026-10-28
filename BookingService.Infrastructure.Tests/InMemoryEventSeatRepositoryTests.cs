@@ -10,9 +10,9 @@ public class InMemoryEventSeatRepositoryTests
     private readonly InMemoryEventSeatRepository _repository = new(seedDefaultInventory: true);
 
     [Fact]
-    public void SeedDefaultInventory_creates_50_available_seats_for_default_event()
+    public async Task SeedDefaultInventory_creates_50_available_seats_for_default_event()
     {
-        var seats = _repository.GetByEvent(RockFestId);
+        var seats = await _repository.GetByEventAsync(RockFestId, CancellationToken.None);
 
         Assert.Equal(50, seats.Count);
         Assert.All(seats, s =>
@@ -24,20 +24,25 @@ public class InMemoryEventSeatRepositoryTests
     }
 
     [Fact]
-    public void Unknown_event_has_no_seats()
+    public async Task Unknown_event_has_no_seats()
     {
-        Assert.Empty(_repository.GetByEvent(Guid.NewGuid()));
+        Assert.Empty(await _repository.GetByEventAsync(Guid.NewGuid(), CancellationToken.None));
     }
 
     [Fact]
-    public void GetByEvent_returns_a_fresh_list_of_the_live_seats()
+    public async Task GetByEvent_returns_a_fresh_list_of_the_live_seats()
     {
-        var before = _repository.GetByEvent(RockFestId);
+        var before = await _repository.GetByEventAsync(RockFestId, CancellationToken.None);
         var seat = before.First();
 
-        _repository.SellOnce(Guid.NewGuid(), RockFestId, seat.Id, s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow));
+        await _repository.SellOnceAsync(
+            Guid.NewGuid(),
+            RockFestId,
+            seat.Id,
+            s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow),
+            CancellationToken.None);
 
-        var after = _repository.GetByEvent(RockFestId);
+        var after = await _repository.GetByEventAsync(RockFestId, CancellationToken.None);
 
         Assert.NotSame(before, after);
         Assert.Equal(50, after.Count);
@@ -46,21 +51,26 @@ public class InMemoryEventSeatRepositoryTests
     }
 
     [Fact]
-    public void Seat_is_found_only_within_its_event()
+    public async Task Seat_is_found_only_within_its_event()
     {
-        var seat = _repository.GetByEvent(RockFestId).First();
+        var seat = (await _repository.GetByEventAsync(RockFestId, CancellationToken.None)).First();
 
-        Assert.Same(seat, _repository.GetById(RockFestId, seat.Id));
-        Assert.Null(_repository.GetById(Guid.NewGuid(), seat.Id));
+        Assert.Same(seat, await _repository.GetByIdAsync(RockFestId, seat.Id, CancellationToken.None));
+        Assert.Null(await _repository.GetByIdAsync(Guid.NewGuid(), seat.Id, CancellationToken.None));
     }
 
     [Fact]
-    public void SellOnce_sells_a_seat_and_issues_its_ticket()
+    public async Task SellOnce_sells_a_seat_and_issues_its_ticket()
     {
-        var seat = _repository.GetByEvent(RockFestId).First();
+        var seat = (await _repository.GetByEventAsync(RockFestId, CancellationToken.None)).First();
         var key = Guid.NewGuid();
 
-        var outcome = _repository.SellOnce(key, RockFestId, seat.Id, s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow));
+        var outcome = await _repository.SellOnceAsync(
+            key,
+            RockFestId,
+            seat.Id,
+            s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow),
+            CancellationToken.None);
 
         Assert.False(outcome.Replayed);
         Assert.NotNull(outcome.Sale);
@@ -70,20 +80,34 @@ public class InMemoryEventSeatRepositoryTests
         Assert.Equal("jane@example.com", outcome.Sale.Ticket.HolderEmail);
         Assert.Equal(seat.Id, outcome.Sale.Ticket.EventSeatId);
 
-        var remembered = _repository.GetSaleByIdempotencyKey(key, RockFestId, seat.Id);
+        var remembered = await _repository.GetSaleByIdempotencyKeyAsync(
+            key,
+            RockFestId,
+            seat.Id,
+            CancellationToken.None);
         Assert.NotNull(remembered);
         Assert.Same(outcome.Sale!.Ticket, remembered!.Ticket);
     }
 
     [Fact]
-    public void Same_key_replays_the_original_sale()
+    public async Task Same_key_replays_the_original_sale()
     {
-        var first = _repository.GetByEvent(RockFestId).First();
-        var second = _repository.GetByEvent(RockFestId).Skip(1).First();
+        var first = (await _repository.GetByEventAsync(RockFestId, CancellationToken.None)).First();
+        var second = (await _repository.GetByEventAsync(RockFestId, CancellationToken.None)).Skip(1).First();
         var key = Guid.NewGuid();
 
-        _repository.SellOnce(key, RockFestId, first.Id, s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow));
-        var outcome = _repository.SellOnce(key, RockFestId, second.Id, s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow));
+        await _repository.SellOnceAsync(
+            key,
+            RockFestId,
+            first.Id,
+            s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow),
+            CancellationToken.None);
+        var outcome = await _repository.SellOnceAsync(
+            key,
+            RockFestId,
+            second.Id,
+            s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow),
+            CancellationToken.None);
 
         Assert.True(outcome.Replayed);
         Assert.NotNull(outcome.Sale);
@@ -92,26 +116,41 @@ public class InMemoryEventSeatRepositoryTests
     }
 
     [Fact]
-    public void SellOnce_on_unknown_seat_returns_null_sale()
+    public async Task SellOnce_on_unknown_seat_returns_null_sale()
     {
-        var outcome = _repository.SellOnce(Guid.NewGuid(), RockFestId, Guid.NewGuid(), s => s.Sell("Jane", "jane@example.com", DateTime.UtcNow));
+        var outcome = await _repository.SellOnceAsync(
+            Guid.NewGuid(),
+            RockFestId,
+            Guid.NewGuid(),
+            s => s.Sell("Jane", "jane@example.com", DateTime.UtcNow),
+            CancellationToken.None);
 
         Assert.False(outcome.Replayed);
         Assert.Null(outcome.Sale);
     }
 
     [Fact]
-    public void Seat_can_only_be_sold_once()
+    public async Task Seat_can_only_be_sold_once()
     {
-        var seat = _repository.GetByEvent(RockFestId).First();
+        var seat = (await _repository.GetByEventAsync(RockFestId, CancellationToken.None)).First();
 
-        _repository.SellOnce(Guid.NewGuid(), RockFestId, seat.Id, s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow));
+        await _repository.SellOnceAsync(
+            Guid.NewGuid(),
+            RockFestId,
+            seat.Id,
+            s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow),
+            CancellationToken.None);
 
-        void SellAgain()
+        async Task SellAgain()
         {
-            _repository.SellOnce(Guid.NewGuid(), RockFestId, seat.Id, s => s.Sell("John", "john@example.com", DateTime.UtcNow));
+            await _repository.SellOnceAsync(
+                Guid.NewGuid(),
+                RockFestId,
+                seat.Id,
+                s => s.Sell("John", "john@example.com", DateTime.UtcNow),
+                CancellationToken.None);
         }
 
-        Assert.Throws<EventSeatAlreadySoldException>(SellAgain);
+        await Assert.ThrowsAsync<EventSeatAlreadySoldException>(SellAgain);
     }
 }
