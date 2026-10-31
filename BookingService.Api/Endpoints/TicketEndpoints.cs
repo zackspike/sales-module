@@ -62,10 +62,14 @@ public static class TicketEndpoints
     /// </summary>
     /// <param name="eventId">The unique identifier of the event.</param>
     /// <param name="handler">Application query handler.</param>
+    /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
     /// <response code="200">List of available seats successfully retrieved.</response>
     /// <response code="404">Event was not found.</response>
-    private static IResult GetAvailableTickets(Guid eventId, GetAvailableEventSeatsHandler handler) =>
-        handler.Handle(new GetAvailableEventSeatsQuery(eventId)) is { } seats
+    private static async Task<IResult> GetAvailableTickets(
+        Guid eventId,
+        GetAvailableEventSeatsHandler handler,
+        CancellationToken cancellationToken) =>
+        await handler.HandleAsync(new GetAvailableEventSeatsQuery(eventId), cancellationToken) is { } seats
             ? Results.Ok(seats)
             : Results.NotFound();
 
@@ -75,10 +79,15 @@ public static class TicketEndpoints
     /// <param name="eventId">The unique identifier of the event.</param>
     /// <param name="ticketId">The unique identifier of the ticket (seat).</param>
     /// <param name="handler">Application query handler.</param>
+    /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
     /// <response code="200">Seat availability status successfully retrieved.</response>
     /// <response code="404">Event or ticket was not found.</response>
-    private static IResult CheckTicketAvailability(Guid eventId, Guid ticketId, GetEventSeatAvailabilityHandler handler) =>
-        handler.Handle(new GetEventSeatAvailabilityQuery(eventId, ticketId)) is { } seat
+    private static async Task<IResult> CheckTicketAvailability(
+        Guid eventId,
+        Guid ticketId,
+        GetEventSeatAvailabilityHandler handler,
+        CancellationToken cancellationToken) =>
+        await handler.HandleAsync(new GetEventSeatAvailabilityQuery(eventId, ticketId), cancellationToken) is { } seat
             ? Results.Ok(seat)
             : Results.NotFound();
 
@@ -89,18 +98,22 @@ public static class TicketEndpoints
     /// <param name="ticketId">The unique identifier of the ticket (seat) to reserve.</param>
     /// <param name="request">Reservation request containing the buyer's full name and email.</param>
     /// <param name="handler">Application command handler.</param>
+    /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
     /// <response code="200">Seat reserved (or reservation renewed) for the buyer.</response>
     /// <response code="400">Request validation failed.</response>
     /// <response code="404">Event or ticket not found in catalog.</response>
     /// <response code="409">Seat is already sold or reserved by another buyer.</response>
     /// <response code="500">Unhandled server error captured by global exception middleware.</response>
-    private static IResult ReserveSeat(
+    private static async Task<IResult> ReserveSeat(
         Guid eventId,
         Guid ticketId,
         ReserveSeatRequest request,
-        ReserveEventSeatHandler handler)
+        ReserveEventSeatHandler handler,
+        CancellationToken cancellationToken)
     {
-        var result = handler.Handle(new ReserveEventSeatCommand(eventId, ticketId, request.FullName, request.Email));
+        var result = await handler.HandleAsync(
+            new ReserveEventSeatCommand(eventId, ticketId, request.FullName, request.Email),
+            cancellationToken);
 
         return result.Status switch
         {
@@ -127,6 +140,7 @@ public static class TicketEndpoints
     /// <param name="request">Purchase request containing attendee's full name and email.</param>
     /// <param name="idempotencyKey">Client-provided UUID in the X-Idempotency-Key header. Required to ensure safe replay.</param>
     /// <param name="handler">Application command handler.</param>
+    /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
     /// <response code="201">New ticket successfully purchased and issued.</response>
     /// <response code="200">Ticket successfully returned on idempotent replay of an already processed purchase.</response>
     /// <response code="400">Request validation failed or X-Idempotency-Key header is missing/invalid.</response>
@@ -134,19 +148,22 @@ public static class TicketEndpoints
     /// <response code="404">Event or ticket not found in catalog.</response>
     /// <response code="409">Seat is already sold or the idempotency key was previously used with different details.</response>
     /// <response code="500">Unhandled server error captured by global exception middleware.</response>
-    private static IResult PurchaseTicket(
+    private static async Task<IResult> PurchaseTicket(
         Guid eventId,
         Guid ticketId,
         PurchaseTicketRequest request,
         [FromHeader(Name = "X-Idempotency-Key")] Guid? idempotencyKey,
-        PurchaseEventSeatHandler handler)
+        PurchaseEventSeatHandler handler,
+        CancellationToken cancellationToken)
     {
-        var result = handler.Handle(new PurchaseEventSeatCommand(
-            eventId,
-            ticketId,
-            request.FullName,
-            request.Email,
-            idempotencyKey ?? Guid.Empty));
+        var result = await handler.HandleAsync(
+            new PurchaseEventSeatCommand(
+                eventId,
+                ticketId,
+                request.FullName,
+                request.Email,
+                idempotencyKey ?? Guid.Empty),
+            cancellationToken);
 
         return result.Status switch
         {
