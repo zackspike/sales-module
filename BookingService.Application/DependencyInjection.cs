@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<PurchaseEventSeatHandler>();
         services.AddScoped<GetEventSeatsHandler>();
         services.AddScoped<GetEventSeatAvailabilityHandler>();
+        services.AddScoped<GetTicketByCodeHandler>();
         return services;
     }
 }

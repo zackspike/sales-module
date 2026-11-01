@@ -64,8 +64,32 @@ public static class TicketEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .Produces<ErrorResponse>(StatusCodes.Status500InternalServerError);
 
+        app.MapGet("/tickets/{ticketCode}", GetTicketByCode)
+            .WithTags("Tickets")
+            .WithName("GetTicketByCode")
+            .WithSummary("Get an issued ticket")
+            .WithDescription("Returns the ticket with the given code, e.g. to show it again after the purchase.")
+            .Produces<TicketDetailsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
+
+    /// <summary>
+    /// Retrieves an issued ticket by its code.
+    /// </summary>
+    /// <param name="ticketCode">The ticket code returned by the purchase (e.g., 'TK-...').</param>
+    /// <param name="handler">Application query handler.</param>
+    /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
+    /// <response code="200">Ticket successfully retrieved.</response>
+    /// <response code="404">No ticket has that code.</response>
+    private static async Task<IResult> GetTicketByCode(
+        string ticketCode,
+        GetTicketByCodeHandler handler,
+        CancellationToken cancellationToken) =>
+        await handler.HandleAsync(new GetTicketByCodeQuery(ticketCode), cancellationToken) is { } ticket
+            ? Results.Ok(TicketDetailsResponse.From(ticket))
+            : Results.NotFound();
 
     /// <summary>
     /// Retrieves all seats of the specified event with their status.

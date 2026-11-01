@@ -124,11 +124,11 @@ public sealed class PurchaseEventSeatHandler
         if (!outcome.Replayed)
         {
             await AfterPurchaseCommittedAsync(outcome.Sale, command, holder);
-            return PurchaseEventSeatResult.Purchased(ToIssuedTicket(outcome.Sale, seatNumber));
+            return PurchaseEventSeatResult.Purchased(IssuedTicket.From(outcome.Sale, seatNumber));
         }
 
         return outcome.Sale.Seat.Id == command.EventSeatId && outcome.Sale.Seat.EventId == command.EventId
-            ? PurchaseEventSeatResult.Replayed(ToIssuedTicket(outcome.Sale, seatNumber))
+            ? PurchaseEventSeatResult.Replayed(IssuedTicket.From(outcome.Sale, seatNumber))
             : PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.IdempotencyKeyConflict);
     }
 
@@ -142,7 +142,7 @@ public sealed class PurchaseEventSeatHandler
             command.EventId,
             command.EventSeatId,
             cancellationToken) is { } sale
-            ? PurchaseEventSeatResult.Replayed(ToIssuedTicket(sale, seatNumber))
+            ? PurchaseEventSeatResult.Replayed(IssuedTicket.From(sale, seatNumber))
             : PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.AlreadySold);
 
     private async Task<PurchaseEventSeatResult> ReplayRememberedPurchaseAsync(
@@ -162,7 +162,7 @@ public sealed class PurchaseEventSeatHandler
             cancellationToken);
         return sale is null
             ? PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.EventSeatNotFound)
-            : PurchaseEventSeatResult.Replayed(ToIssuedTicket(sale, await SeatNumberOfAsync(sale.Seat, cancellationToken)));
+            : PurchaseEventSeatResult.Replayed(IssuedTicket.From(sale, await SeatNumberOfAsync(sale.Seat, cancellationToken)));
     }
 
     /// <summary>
@@ -204,13 +204,4 @@ public sealed class PurchaseEventSeatHandler
         (await _venueSeatCatalog.GetByIdAsync(eventSeat.VenueSeatId, cancellationToken))?.SeatNumber
             ?? throw new InvalidOperationException(
                 $"Event seat {eventSeat.Id} references venue seat {eventSeat.VenueSeatId}, which is not in the catalog.");
-
-    private static IssuedTicket ToIssuedTicket(EventSeatSale sale, string seatNumber) => new(
-        sale.Seat.Id,
-        sale.Seat.EventId,
-        seatNumber,
-        sale.Ticket.HolderName,
-        sale.Ticket.HolderEmail,
-        sale.Ticket.TicketCode,
-        sale.Ticket.SoldAtUtc);
 }

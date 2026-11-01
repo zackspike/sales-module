@@ -90,6 +90,18 @@ public sealed class InMemoryEventSeatRepository : IEventSeatRepository
         }
     }
 
+    public Task<EventSeatSale?> GetSaleByTicketCodeAsync(string ticketCode, CancellationToken cancellationToken)
+    {
+        lock (_lock)
+        {
+            var ticket = _ticketsById.Values.FirstOrDefault(t => t.TicketCode == ticketCode);
+            return Task.FromResult(
+                ticket is not null && _seatsById.TryGetValue(ticket.EventSeatId, out var seat)
+                    ? new EventSeatSale(seat, ticket)
+                    : null);
+        }
+    }
+
     public Task<EventSeatSaleOutcome> SellOnceAsync(
         Guid idempotencyKey,
         Guid eventId,

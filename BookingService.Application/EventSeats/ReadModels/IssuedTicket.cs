@@ -1,3 +1,5 @@
+using BookingService.Application.Abstractions;
+
 namespace BookingService.Application.EventSeats.ReadModels;
 
 /// <summary>
@@ -18,4 +20,14 @@ public sealed record IssuedTicket(
     string HolderName,
     string HolderEmail,
     string TicketCode,
-    DateTime SoldAtUtc);
+    DateTime SoldAtUtc)
+{
+    public static IssuedTicket From(EventSeatSale sale, string seatNumber) => new(
+        sale.Seat.Id,
+        sale.Seat.EventId,
+        seatNumber,
+        sale.Ticket.HolderName,
+        sale.Ticket.HolderEmail,
+        sale.Ticket.TicketCode,
+        sale.Ticket.SoldAtUtc);
+}

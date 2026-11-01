@@ -90,6 +90,25 @@ public class InMemoryEventSeatRepositoryTests
     }
 
     [Fact]
+    public async Task Sale_is_found_by_its_ticket_code()
+    {
+        var seat = (await _repository.GetByEventAsync(RockFestId, CancellationToken.None)).First();
+        var outcome = await _repository.SellOnceAsync(
+            Guid.NewGuid(),
+            RockFestId,
+            seat.Id,
+            s => s.Sell("Jane Doe", "jane@example.com", DateTime.UtcNow),
+            CancellationToken.None);
+
+        var found = await _repository.GetSaleByTicketCodeAsync(outcome.Sale!.Ticket.TicketCode, CancellationToken.None);
+
+        Assert.NotNull(found);
+        Assert.Same(seat, found.Seat);
+        Assert.Same(outcome.Sale.Ticket, found.Ticket);
+        Assert.Null(await _repository.GetSaleByTicketCodeAsync("TK-unknown", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Same_key_replays_the_original_sale()
     {
         var first = (await _repository.GetByEventAsync(RockFestId, CancellationToken.None)).First();

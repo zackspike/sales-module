@@ -27,6 +27,9 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(t => t.TicketCode)
             .HasMaxLength(100);
 
+        builder.HasIndex(t => t.TicketCode)
+            .IsUnique();
+
         builder.Property(t => t.HolderName)
             .IsRequired()
             .HasMaxLength(Ticket.MaxHolderFullNameLength);

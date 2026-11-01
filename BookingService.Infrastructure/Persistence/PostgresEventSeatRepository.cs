@@ -69,6 +69,15 @@ public sealed class PostgresEventSeatRepository : IEventSeatRepository
         return new EventSeatSale(seat, ticket);
     }
 
+    public async Task<EventSeatSale?> GetSaleByTicketCodeAsync(string ticketCode, CancellationToken cancellationToken)
+    {
+        var ticket = await _dbContext.Tickets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.TicketCode == ticketCode, cancellationToken);
+
+        return ticket is null ? null : await LoadSaleAsync(ticket, cancellationToken);
+    }
+
     public async Task<EventSeatSaleOutcome> SellOnceAsync(
         Guid idempotencyKey,
         Guid eventId,

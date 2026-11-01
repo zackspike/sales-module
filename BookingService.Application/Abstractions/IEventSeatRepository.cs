@@ -30,6 +30,11 @@ public interface IEventSeatRepository
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Returns the sale whose ticket has code <paramref name="ticketCode"/>, or null if no ticket has it.
+    /// </summary>
+    Task<EventSeatSale?> GetSaleByTicketCodeAsync(string ticketCode, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Runs <paramref name="sell"/> on seat <paramref name="eventSeatId"/> of event <paramref name="eventId"/>
     /// at most once per <paramref name="idempotencyKey"/>. The key lookup, the seat lookup, the sale and the
     /// storage of the sold seat, its ticket and the key happen atomically, so two concurrent buyers can't both
