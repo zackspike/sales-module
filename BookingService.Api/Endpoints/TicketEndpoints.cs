@@ -42,6 +42,16 @@ public static class TicketEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .Produces<ErrorResponse>(StatusCodes.Status500InternalServerError);
 
+        tickets.MapPost("/{ticketId:guid}/release", ReleaseSeat)
+            .WithName("ReleaseSeat")
+            .WithSummary("Release a seat reservation")
+            .WithDescription("Releases the seat reserved with the given email so other buyers can take it. Succeeds if the seat is not reserved (e.g. the reservation expired).")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces<ErrorResponse>(StatusCodes.Status500InternalServerError);
+
         tickets.MapPost("/{ticketId:guid}/purchase", PurchaseTicket)
             .WithName("PurchaseTicket")
             .WithSummary("Purchase an event seat")
@@ -126,6 +136,42 @@ public static class TicketEndpoints
             ReserveEventSeatStatus.AlreadySold => Results.Conflict(new { error = "The requested seat has already been purchased." }),
             ReserveEventSeatStatus.ReservedByAnotherBuyer => Results.Conflict(new { error = "The requested seat is reserved by another buyer." }),
             _ => throw new UnreachableException($"Unhandled reservation status '{result.Status}'.")
+        };
+    }
+
+    /// <summary>
+    /// Releases the buyer's reservation of a specific seat.
+    /// </summary>
+    /// <param name="eventId">The unique identifier of the event.</param>
+    /// <param name="ticketId">The unique identifier of the ticket (seat) to release.</param>
+    /// <param name="request">Release request containing the email the seat was reserved with.</param>
+    /// <param name="handler">Application command handler.</param>
+    /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
+    /// <response code="204">The buyer no longer holds the seat.</response>
+    /// <response code="400">Request validation failed.</response>
+    /// <response code="404">Event or ticket not found in catalog.</response>
+    /// <response code="409">Seat is already sold or reserved by another buyer.</response>
+    /// <response code="500">Unhandled server error captured by global exception middleware.</response>
+    private static async Task<IResult> ReleaseSeat(
+        Guid eventId,
+        Guid ticketId,
+        ReleaseSeatRequest request,
+        ReleaseEventSeatHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(
+            new ReleaseEventSeatCommand(eventId, ticketId, request.Email),
+            cancellationToken);
+
+        return result.Status switch
+        {
+            ReleaseEventSeatStatus.Released => Results.NoContent(),
+            ReleaseEventSeatStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
+            ReleaseEventSeatStatus.EventNotFound => Results.NotFound(new { error = $"Event '{eventId}' not found." }),
+            ReleaseEventSeatStatus.EventSeatNotFound => Results.NotFound(new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." }),
+            ReleaseEventSeatStatus.AlreadySold => Results.Conflict(new { error = "The requested seat has already been purchased." }),
+            ReleaseEventSeatStatus.ReservedByAnotherBuyer => Results.Conflict(new { error = "The requested seat is reserved by another buyer." }),
+            _ => throw new UnreachableException($"Unhandled release status '{result.Status}'.")
         };
     }
 
