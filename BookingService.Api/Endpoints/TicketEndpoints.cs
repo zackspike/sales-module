@@ -118,10 +118,7 @@ public static class TicketEndpoints
         return result.Status switch
         {
             ReserveEventSeatStatus.Reserved => Results.Ok(new SeatReservationResponse(
-                result.Seat!.EventSeatId,
-                eventId,
-                result.Seat.SeatNumber,
-                request.Email.Trim(),
+                result.Seat!.SeatNumber,
                 result.Seat.ExpiresAtUtc)),
             ReserveEventSeatStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
             ReserveEventSeatStatus.EventNotFound => Results.NotFound(new { error = $"Event '{eventId}' not found." }),
@@ -183,11 +180,7 @@ public static class TicketEndpoints
     }
 
     private static TicketResponse ToTicketResponse(IssuedTicket ticket) => new(
-        ticket.EventSeatId,
-        ticket.EventId,
         ticket.SeatNumber,
-        ticket.HolderName,
-        ticket.HolderEmail,
         ticket.TicketCode,
         ticket.SoldAtUtc);
 }
