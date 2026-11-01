@@ -46,7 +46,7 @@ public class PurchaseEventSeatHandlerTests
         var repository = new FakeEventSeatRepository(seat);
         var locks = BuyerLock(seat);
         var idempotency = new FakeIdempotencyStore();
-        var cache = new FakeAvailableEventSeatsCache();
+        var cache = new FakeEventSeatsCache();
         var key = Guid.NewGuid();
 
         var result = await Handler(repository, locks, idempotency, cache: cache).HandleAsync(Command(seat.Id, key), CancellationToken.None);
@@ -68,7 +68,7 @@ public class PurchaseEventSeatHandlerTests
             new FakeVenueSeatCatalog(),
             new FakeEventSeatLockStore(),
             new FakeIdempotencyStore(),
-            new FakeAvailableEventSeatsCache(),
+            new FakeEventSeatsCache(),
             NullLogger<PurchaseEventSeatHandler>.Instance).HandleAsync(
                 Command(Guid.NewGuid(), Guid.Empty, "", "bad"), CancellationToken.None);
 
@@ -99,7 +99,7 @@ public class PurchaseEventSeatHandlerTests
             new FakeVenueSeatCatalog(),
             new FakeEventSeatLockStore(),
             new FakeIdempotencyStore(),
-            new FakeAvailableEventSeatsCache(),
+            new FakeEventSeatsCache(),
             NullLogger<PurchaseEventSeatHandler>.Instance).HandleAsync(
                 new(OtherEventId, Guid.NewGuid(), "Jane Doe", "jane@example.com", Guid.NewGuid()), CancellationToken.None);
 
@@ -319,7 +319,7 @@ public class PurchaseEventSeatHandlerTests
         var seat = Seat();
         var locks = BuyerLock(seat);
         var idempotency = new FakeIdempotencyStore { ThrowOnRemember = true };
-        var cache = new FakeAvailableEventSeatsCache();
+        var cache = new FakeEventSeatsCache();
         var logger = new FakeLogger();
 
         var result = await Handler(new FakeEventSeatRepository(seat), locks, idempotency, logger: logger, cache: cache)
@@ -364,7 +364,7 @@ public class PurchaseEventSeatHandlerTests
         FakeIdempotencyStore? idempotency = null,
         ILogger<PurchaseEventSeatHandler>? logger = null,
         FakeVenueSeatCatalog? venue = null,
-        FakeAvailableEventSeatsCache? cache = null,
+        FakeEventSeatsCache? cache = null,
         FakeEventCatalog? catalog = null) =>
         new(
             catalog ?? new FakeEventCatalog(EventId),
@@ -372,7 +372,7 @@ public class PurchaseEventSeatHandlerTests
             venue ?? new FakeVenueSeatCatalog(new VenueSeat(VenueSeatId, ZoneId, "A-1")),
             locks,
             idempotency ?? new FakeIdempotencyStore(),
-            cache ?? new FakeAvailableEventSeatsCache(),
+            cache ?? new FakeEventSeatsCache(),
             logger ?? NullLogger<PurchaseEventSeatHandler>.Instance);
 
     private static EventSeat Seat() => EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);

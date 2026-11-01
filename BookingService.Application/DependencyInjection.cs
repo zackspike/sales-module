@@ -13,7 +13,7 @@ public static class DependencyInjection
     {
         services.AddScoped<ReserveEventSeatHandler>();
         services.AddScoped<PurchaseEventSeatHandler>();
-        services.AddScoped<GetAvailableEventSeatsHandler>();
+        services.AddScoped<GetEventSeatsHandler>();
         services.AddScoped<GetEventSeatAvailabilityHandler>();
         return services;
     }

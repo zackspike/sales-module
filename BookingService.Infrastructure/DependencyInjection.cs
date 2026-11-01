@@ -15,7 +15,7 @@ public static class DependencyInjection
     /// is configured, it registers EF Core with Postgres repositories. Otherwise, it falls back
     /// to in-memory stores for isolated testing without a live database.
     /// Likewise, a Redis connection string ("Redis") enables the Redis seat locks, idempotency store
-    /// and available seats cache; without it, seat locks are kept in memory and nothing is cached.
+    /// and event seats cache; without it, seat locks are kept in memory and nothing is cached.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration? configuration = null)
     {
@@ -54,14 +54,14 @@ public static class DependencyInjection
             });
             services.AddSingleton<IEventSeatLockStore, RedisSeatLockStore>();
             services.AddSingleton<IIdempotencyStore, RedisIdempotencyStore>();
-            services.AddSingleton<IAvailableEventSeatsCache, RedisAvailableSeatsCache>();
+            services.AddSingleton<IEventSeatsCache, RedisEventSeatsCache>();
         }
         else
         {
             services.AddSingleton<IEventSeatLockStore>(_ => new InMemorySeatLockStore());
             services.AddSingleton<NoCache>();
             services.AddSingleton<IIdempotencyStore>(sp => sp.GetRequiredService<NoCache>());
-            services.AddSingleton<IAvailableEventSeatsCache>(sp => sp.GetRequiredService<NoCache>());
+            services.AddSingleton<IEventSeatsCache>(sp => sp.GetRequiredService<NoCache>());
         }
 
         return services;

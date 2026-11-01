@@ -24,7 +24,7 @@ public sealed class PurchaseEventSeatHandler
     private readonly IVenueSeatCatalog _venueSeatCatalog;
     private readonly IEventSeatLockStore _eventSeatLocks;
     private readonly IIdempotencyStore _idempotency;
-    private readonly IAvailableEventSeatsCache _availableEventSeatsCache;
+    private readonly IEventSeatsCache _eventSeatsCache;
     private readonly ILogger<PurchaseEventSeatHandler> _logger;
 
     public PurchaseEventSeatHandler(
@@ -33,7 +33,7 @@ public sealed class PurchaseEventSeatHandler
         IVenueSeatCatalog venueSeatCatalog,
         IEventSeatLockStore eventSeatLocks,
         IIdempotencyStore idempotency,
-        IAvailableEventSeatsCache availableEventSeatsCache,
+        IEventSeatsCache eventSeatsCache,
         ILogger<PurchaseEventSeatHandler> logger)
     {
         _eventCatalog = eventCatalog;
@@ -41,7 +41,7 @@ public sealed class PurchaseEventSeatHandler
         _venueSeatCatalog = venueSeatCatalog;
         _eventSeatLocks = eventSeatLocks;
         _idempotency = idempotency;
-        _availableEventSeatsCache = availableEventSeatsCache;
+        _eventSeatsCache = eventSeatsCache;
         _logger = logger;
     }
 
@@ -180,8 +180,8 @@ public sealed class PurchaseEventSeatHandler
             CancellationToken.None));
         await BestEffortAsync("seat lock", sale.Seat.Id, () =>
             _eventSeatLocks.ReleaseAsync(sale.Seat.Id, holder, CancellationToken.None));
-        await BestEffortAsync("available seats cache", sale.Seat.Id, () =>
-            _availableEventSeatsCache.InvalidateAsync(command.EventId, CancellationToken.None));
+        await BestEffortAsync("event seats cache", sale.Seat.Id, () =>
+            _eventSeatsCache.InvalidateAsync(command.EventId, CancellationToken.None));
     }
 
     private async Task BestEffortAsync(string store, Guid eventSeatId, Func<Task> update)

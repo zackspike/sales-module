@@ -18,11 +18,11 @@ public static class TicketEndpoints
     {
         var tickets = app.MapGroup("/events/{eventId:guid}/tickets").WithTags("Tickets");
 
-        tickets.MapGet("/", GetAvailableTickets)
-            .WithName("GetAvailableTickets")
-            .WithSummary("List available seats for an event")
-            .WithDescription("Returns all seats currently in 'Available' status and not reserved by a buyer for the specified event ID.")
-            .Produces<IReadOnlyList<AvailableEventSeat>>(StatusCodes.Status200OK)
+        tickets.MapGet("/", GetEventSeats)
+            .WithName("GetEventSeats")
+            .WithSummary("List the seats of an event")
+            .WithDescription("Returns all seats of the specified event with their status: 'Available', 'Reserved' (locked by a buyer) or 'Sold'.")
+            .Produces<IReadOnlyList<EventSeatAvailability>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
         tickets.MapGet("/{ticketId:guid}/availability", CheckTicketAvailability)
@@ -58,18 +58,18 @@ public static class TicketEndpoints
     }
 
     /// <summary>
-    /// Retrieves all available seats for the specified event.
+    /// Retrieves all seats of the specified event with their status.
     /// </summary>
     /// <param name="eventId">The unique identifier of the event.</param>
     /// <param name="handler">Application query handler.</param>
     /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
-    /// <response code="200">List of available seats successfully retrieved.</response>
+    /// <response code="200">List of seats with their status successfully retrieved.</response>
     /// <response code="404">Event was not found.</response>
-    private static async Task<IResult> GetAvailableTickets(
+    private static async Task<IResult> GetEventSeats(
         Guid eventId,
-        GetAvailableEventSeatsHandler handler,
+        GetEventSeatsHandler handler,
         CancellationToken cancellationToken) =>
-        await handler.HandleAsync(new GetAvailableEventSeatsQuery(eventId), cancellationToken) is { } seats
+        await handler.HandleAsync(new GetEventSeatsQuery(eventId), cancellationToken) is { } seats
             ? Results.Ok(seats)
             : Results.NotFound();
 
