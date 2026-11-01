@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json.Serialization;
 using BookingService.Api.Endpoints;
 using BookingService.Api.Middleware;
 using BookingService.Application;
@@ -32,7 +33,18 @@ builder.Services.AddSwaggerGen(options =>
     {
         options.IncludeXmlComments(appXmlPath);
     }
+
+    options.SupportNonNullableReferenceTypes();
+    options.NonNullableReferenceTypesAsRequired();
+    options.UseAllOfToExtendReferenceSchemas();
 });
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// Swashbuckle builds schemas from the MVC JSON options, not the Minimal API ones above.
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddCors(options =>
 {
