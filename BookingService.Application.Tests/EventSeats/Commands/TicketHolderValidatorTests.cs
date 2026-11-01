@@ -79,6 +79,13 @@ public class TicketHolderValidatorTests
         Assert.Contains("email", errors.Keys);
     }
 
+    [Fact]
+    public void Email_only_validation_ignores_full_name()
+    {
+        Assert.Empty(TicketHolderValidator.ValidateEmail(" jane@example.com "));
+        Assert.Equal("email", Assert.Single(TicketHolderValidator.ValidateEmail("not-an-email").Keys));
+    }
+
     private static string MaxLengthEmail()
     {
         var localPart = new string('a', 64);

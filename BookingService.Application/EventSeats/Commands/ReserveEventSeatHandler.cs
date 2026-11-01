@@ -6,7 +6,7 @@ namespace BookingService.Application.EventSeats.Commands;
 
 /// <summary>
 /// First step of the purchase flow: the fan selects a seat and clicks "comprar".
-/// Validates name and email (400), checks the event and event seat exist (404) and the seat is not sold,
+/// Validates the email (400), checks the event and event seat exist (404) and the seat is not sold,
 /// and reserves it for the buyer (identified by email) during <see cref="EventSeatReservationPolicy.Duration"/>.
 /// </summary>
 public sealed class ReserveEventSeatHandler
@@ -32,7 +32,7 @@ public sealed class ReserveEventSeatHandler
         ReserveEventSeatCommand command,
         CancellationToken cancellationToken)
     {
-        var errors = TicketHolderValidator.Validate(command.FullName, command.Email);
+        var errors = TicketHolderValidator.ValidateEmail(command.Email);
         if (errors.Count > 0)
         {
             return ReserveEventSeatResult.Invalid(errors);

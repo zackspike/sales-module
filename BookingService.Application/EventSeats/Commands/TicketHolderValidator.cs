@@ -25,6 +25,21 @@ public static class TicketHolderValidator
             errors["fullName"] = ["fullName is too long"];
         }
 
+        foreach (var (field, messages) in ValidateEmail(email))
+        {
+            errors[field] = messages;
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Validates only the buyer email, as needed to reserve a seat; errors are keyed by <c>email</c>.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string[]> ValidateEmail(string email)
+    {
+        var errors = new Dictionary<string, string[]>();
+
         if (string.IsNullOrWhiteSpace(email))
         {
             errors["email"] = ["email is required."];

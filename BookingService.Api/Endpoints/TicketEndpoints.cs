@@ -96,7 +96,7 @@ public static class TicketEndpoints
     /// </summary>
     /// <param name="eventId">The unique identifier of the event.</param>
     /// <param name="ticketId">The unique identifier of the ticket (seat) to reserve.</param>
-    /// <param name="request">Reservation request containing the buyer's full name and email.</param>
+    /// <param name="request">Reservation request containing the buyer's email.</param>
     /// <param name="handler">Application command handler.</param>
     /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
     /// <response code="200">Seat reserved (or reservation renewed) for the buyer.</response>
@@ -112,7 +112,7 @@ public static class TicketEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(
-            new ReserveEventSeatCommand(eventId, ticketId, request.FullName, request.Email),
+            new ReserveEventSeatCommand(eventId, ticketId, request.Email),
             cancellationToken);
 
         return result.Status switch
