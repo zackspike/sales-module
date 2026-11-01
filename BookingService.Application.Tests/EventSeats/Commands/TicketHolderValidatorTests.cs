@@ -49,11 +49,32 @@ public class TicketHolderValidatorTests
     [InlineData("a@")]
     [InlineData("@b.com")]
     [InlineData("Jane <jane@example.com>")]
+    [InlineData("jane@localhost")]
+    [InlineData("a@b")]
+    [InlineData("\"jane doe\"@example.com")]
+    [InlineData("jane@-example.com")]
+    [InlineData("jane@example-.com")]
+    [InlineData("jane@example.c")]
+    [InlineData("jane@example..com")]
+    [InlineData("jane..doe@example.com")]
+    [InlineData(".jane@example.com")]
+    [InlineData("jane@example.com.")]
+    [InlineData("jane doe@example.com")]
     public void Invalid_email_returns_email_error(string? email)
     {
         var errors = TicketHolderValidator.Validate("Jane Doe", email!);
 
         Assert.Contains("email", errors.Keys);
+    }
+
+    [Theory]
+    [InlineData("jane.doe+tag@example.com")]
+    [InlineData("j_o-e@sub.example.co")]
+    [InlineData("JANE@EXAMPLE.COM")]
+    [InlineData("jane@my-domain.io")]
+    public void Valid_email_has_no_errors(string email)
+    {
+        Assert.Empty(TicketHolderValidator.ValidateEmail(email));
     }
 
     [Fact]
