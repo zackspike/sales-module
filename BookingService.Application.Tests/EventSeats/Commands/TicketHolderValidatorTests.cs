@@ -72,6 +72,8 @@ public class TicketHolderValidatorTests
     [InlineData("j_o-e@sub.example.co")]
     [InlineData("JANE@EXAMPLE.COM")]
     [InlineData("jane@my-domain.io")]
+    [InlineData("jane@example.xn--p1ai")]
+    [InlineData("jane@example.xn--fiqs8s")]
     public void Valid_email_has_no_errors(string email)
     {
         Assert.Empty(TicketHolderValidator.ValidateEmail(email));

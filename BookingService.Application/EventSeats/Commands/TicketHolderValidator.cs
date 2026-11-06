@@ -72,10 +72,11 @@ public static partial class TicketHolderValidator
 
     /// <summary>
     /// <c>local@domain.tld</c>: a dot-atom local part (no quotes or spaces), domain labels of 1 to 63
-    /// letters, digits or inner hyphens, and an alphabetic top-level domain of at least 2 letters.
+    /// letters, digits or inner hyphens, and a top-level domain that is either alphabetic with at least
+    /// 2 letters or an internationalized one in punycode (<c>xn--p1ai</c>, <c>xn--fiqs8s</c>).
     /// </summary>
     [GeneratedRegex(
-        @"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$",
+        @"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+(?:[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{1,59})$",
         RegexOptions.CultureInvariant)]
     private static partial Regex EmailPattern();
 

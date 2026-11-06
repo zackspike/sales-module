@@ -82,7 +82,7 @@ Every use case returns a result with a status; the HTTP code listed for each sta
 ### Common rules
 * **Holder validation (`TicketHolderValidator`, SP-05 / VAL-02):** used by reserve and purchase.
   * `fullName`: required; at most 64 characters after trimming.
-  * `email`: required; at most 254 characters after trimming; must match `local@domain.tld` (dot-atom local part without quotes or spaces, domain labels without leading/trailing hyphens, alphabetic TLD of 2+ letters) and parse with `MailAddress` as the same address (so `jane@localhost`, `"jane doe"@example.com` and display-name forms like `Jane <jane@example.com>` are rejected).
+  * `email`: required; at most 254 characters after trimming; must match `local@domain.tld` (dot-atom local part without quotes or spaces, domain labels without leading/trailing hyphens, alphabetic TLD of 2+ letters or a punycode TLD such as `xn--p1ai`) and parse with `MailAddress` as the same address (so `jane@localhost`, `"jane doe"@example.com` and display-name forms like `Jane <jane@example.com>` are rejected).
   * Errors are returned as a dictionary keyed by JSON field name (`fullName`, `email`).
 * **Buyer identity in seat locks (`EventSeatLockHolder`):** the email, trimmed and lower-cased, so reserve and purchase produce the same identifier.
 * **Seat number:** always resolved from `IVenueSeatCatalog` through `EventSeat.VenueSeatId`. A seat whose venue seat is missing from the catalog is an inconsistency (`InvalidOperationException`) and is never reserved or sold.
