@@ -13,7 +13,7 @@ public sealed record TicketResponse(
     string SeatNumber,
     string TicketCode,
     [property: JsonPropertyName("createdAt")]
-    DateTime? PurchasedAtUtc)
+    DateTime PurchasedAtUtc)
 {
     public static TicketResponse From(IssuedTicket ticket) => new(
         ticket.SeatNumber,
