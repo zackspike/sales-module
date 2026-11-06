@@ -89,7 +89,7 @@ public static class TicketEndpoints
         CancellationToken cancellationToken) =>
         await handler.HandleAsync(new GetTicketByCodeQuery(ticketCode), cancellationToken) is { } ticket
             ? Results.Ok(TicketDetailsResponse.From(ticket))
-            : Results.NotFound();
+            : Results.NotFound(new { error = $"Ticket '{ticketCode}' not found." });
 
     /// <summary>
     /// Retrieves all seats of the specified event with their status.
@@ -105,7 +105,7 @@ public static class TicketEndpoints
         CancellationToken cancellationToken) =>
         await handler.HandleAsync(new GetEventSeatsQuery(eventId), cancellationToken) is { } seats
             ? Results.Ok(seats)
-            : Results.NotFound();
+            : Results.NotFound(new { error = $"Event '{eventId}' not found." });
 
     /// <summary>
     /// Checks the current availability of a specific seat in an event.
@@ -123,7 +123,7 @@ public static class TicketEndpoints
         CancellationToken cancellationToken) =>
         await handler.HandleAsync(new GetEventSeatAvailabilityQuery(eventId, ticketId), cancellationToken) is { } seat
             ? Results.Ok(seat)
-            : Results.NotFound();
+            : Results.NotFound(new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." });
 
     /// <summary>
     /// Reserves (locks) a specific seat for the buyer during 10 minutes.
