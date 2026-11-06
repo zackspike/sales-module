@@ -235,8 +235,8 @@ public static class TicketEndpoints
         return result.Status switch
         {
             PurchaseEventSeatStatus.Purchased => Results.Created(
-                $"/events/{eventId}/tickets/{ticketId}/availability", ToTicketResponse(result.Ticket!)),
-            PurchaseEventSeatStatus.Replayed => Results.Ok(ToTicketResponse(result.Ticket!)),
+                $"/events/{eventId}/tickets/{ticketId}/availability", TicketResponse.From(result.Ticket!)),
+            PurchaseEventSeatStatus.Replayed => Results.Ok(TicketResponse.From(result.Ticket!)),
             PurchaseEventSeatStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
             PurchaseEventSeatStatus.EventNotFound => Results.NotFound(new { error = $"Event '{eventId}' not found." }),
             PurchaseEventSeatStatus.EventSeatNotFound => Results.NotFound(new { error = $"Ticket '{ticketId}' not found in event '{eventId}'." }),
@@ -248,9 +248,4 @@ public static class TicketEndpoints
             _ => throw new UnreachableException($"Unhandled purchase status '{result.Status}'.")
         };
     }
-
-    private static TicketResponse ToTicketResponse(IssuedTicket ticket) => new(
-        ticket.SeatNumber,
-        ticket.TicketCode,
-        ticket.SoldAtUtc);
 }
