@@ -160,8 +160,8 @@ First step of the purchase: the fan selects a seat and clicks "comprar".
 * **Standard Error Responses:** Clean, consistent JSON error payloads (`statusCode`, `message`, `details`, `traceId`, `timestampUtc`).
   * `BadHttpRequestException` -> `400 Bad Request` (e.g., a malformed `X-Idempotency-Key` GUID).
   * `KeyNotFoundException` -> `404 Not Found`
-  * `ArgumentException` / `InvalidOperationException` -> `400 Bad Request`
-  * Unhandled exceptions -> `500 Internal Server Error`
+  * `ArgumentException` -> `400 Bad Request`
+  * Unhandled exceptions -> `500 Internal Server Error`, including `InvalidOperationException` (e.g., an event seat whose venue seat is missing from the catalog is a server inconsistency, not a client error)
 * **CORS:** Enabled for local frontend development (`AllowAnyOrigin`, `AllowAnyHeader`, `AllowAnyMethod`).
 
 ---
