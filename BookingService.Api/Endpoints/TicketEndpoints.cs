@@ -235,7 +235,7 @@ public static class TicketEndpoints
         return result.Status switch
         {
             PurchaseEventSeatStatus.Purchased => Results.Created(
-                $"/events/{eventId}/tickets/{ticketId}/availability", TicketResponse.From(result.Ticket!)),
+                $"/tickets/{result.Ticket!.TicketCode}", TicketResponse.From(result.Ticket)),
             PurchaseEventSeatStatus.Replayed => Results.Ok(TicketResponse.From(result.Ticket!)),
             PurchaseEventSeatStatus.Invalid => Results.BadRequest(new { errors = result.Errors }),
             PurchaseEventSeatStatus.EventNotFound => Results.NotFound(new { error = $"Event '{eventId}' not found." }),
