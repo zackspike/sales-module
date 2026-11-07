@@ -31,7 +31,8 @@ public class ReserveEventSeatHandlerTests
             before + EventSeatReservationPolicy.Duration,
             after + EventSeatReservationPolicy.Duration);
         Assert.Equal(EventSeatReservationPolicy.Duration, locks.LastDuration);
-        Assert.Equal("juan.perez@example.com", locks.GetHolderIdentifier(seat.Id));
+        Assert.Equal(64, result.Seat.BuyerToken.Length);
+        Assert.Equal($"{result.Seat.BuyerToken}:juan.perez@example.com", locks.GetHolderIdentifier(seat.Id));
     }
 
     [Fact]
@@ -86,12 +87,12 @@ public class ReserveEventSeatHandlerTests
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
-        locks.TryAcquire(seat.Id, "other@example.com", TimeSpan.FromMinutes(10));
+        locks.TryAcquire(seat.Id, "other-token:other@example.com", TimeSpan.FromMinutes(10));
 
         var result = await Handler(new FakeEventSeatRepository(seat), locks).HandleAsync(Command(seat.Id), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.ReservedByAnotherBuyer, result.Status);
-        Assert.Equal("other@example.com", locks.GetHolderIdentifier(seat.Id));
+        Assert.Equal("other-token:other@example.com", locks.GetHolderIdentifier(seat.Id));
     }
 
     [Fact]
@@ -99,16 +100,30 @@ public class ReserveEventSeatHandlerTests
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
-        locks.TryAcquire(seat.Id, "juan@example.com", TimeSpan.FromMinutes(10));
+        locks.TryAcquire(seat.Id, "token:juan@example.com", TimeSpan.FromMinutes(10));
         locks.ResetAcquireCalls();
 
         var result = await Handler(new FakeEventSeatRepository(seat), locks)
-            .HandleAsync(Command(seat.Id, " JUAN@Example.com "), CancellationToken.None);
+            .HandleAsync(Command(seat.Id, " JUAN@Example.com ", "token"), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.Reserved, result.Status);
+        Assert.Equal("token", result.Seat!.BuyerToken);
         Assert.Equal(1, locks.AcquireCalls);
         Assert.Equal(EventSeatReservationPolicy.Duration, locks.LastDuration);
-        Assert.Equal("juan@example.com", locks.GetHolderIdentifier(seat.Id));
+        Assert.Equal("token:juan@example.com", locks.GetHolderIdentifier(seat.Id));
+    }
+
+    [Fact]
+    public async Task Same_email_without_the_buyer_token_cannot_take_the_reservation()
+    {
+        var seat = Seat();
+        var locks = new FakeEventSeatLockStore();
+        locks.TryAcquire(seat.Id, "token:jane@example.com", TimeSpan.FromMinutes(10));
+
+        var result = await Handler(new FakeEventSeatRepository(seat), locks).HandleAsync(Command(seat.Id), CancellationToken.None);
+
+        Assert.Equal(ReserveEventSeatStatus.ReservedByAnotherBuyer, result.Status);
+        Assert.Equal("token:jane@example.com", locks.GetHolderIdentifier(seat.Id));
     }
 
     [Fact]
@@ -155,8 +170,8 @@ public class ReserveEventSeatHandlerTests
         Assert.Null(locks.GetHolderIdentifier(seat.Id));
     }
 
-    private static ReserveEventSeatCommand Command(Guid seatId, string email = "jane@example.com") =>
-        new(EventId, seatId, email);
+    private static ReserveEventSeatCommand Command(Guid seatId, string email = "jane@example.com", string? token = null) =>
+        new(EventId, seatId, email, token);
 
     private static ReserveEventSeatHandler Handler(
         FakeEventSeatRepository repository,
