@@ -84,7 +84,7 @@ Every use case returns a result with a status; the HTTP code listed for each sta
   * `fullName`: required; at most 64 characters after trimming.
   * `email`: required; at most 254 characters after trimming; must match `local@domain.tld` (dot-atom local part without quotes or spaces, domain labels without leading/trailing hyphens, alphabetic TLD of 2+ letters or a punycode TLD such as `xn--p1ai`) and parse with `MailAddress` as the same address (so `jane@localhost`, `"jane doe"@example.com` and display-name forms like `Jane <jane@example.com>` are rejected).
   * Errors are returned as a dictionary keyed by JSON field name (`fullName`, `email`).
-* **Buyer identity in seat locks (`EventSeatLockHolder`):** the email, trimmed and lower-cased, so reserve and purchase produce the same identifier.
+* **Buyer identity in seat locks (`EventSeatLockHolder`):** `{buyerToken}:{email}` (email trimmed and lower-cased). The buyer token is a random secret (64 hex chars, CSPRNG) issued on the first reservation and kept by the browser in the `booking_buyer` cookie (HttpOnly, Secure, SameSite=Strict, Path=/events). Reserve (to renew), release and purchase must send both the same email and the cookie, so knowing a buyer's email is not enough to release, take over or buy their reservation.
 * **Seat number:** always resolved from `IVenueSeatCatalog` through `EventSeat.VenueSeatId`. A seat whose venue seat is missing from the catalog is an inconsistency (`InvalidOperationException`) and is never reserved or sold.
 * **Event existence:** checked with `IEventCatalog.Exists` (404 if unknown).
 
@@ -100,9 +100,9 @@ Every use case returns a result with a status; the HTTP code listed for each sta
 
 ### Reserve an event seat (`ReserveEventSeatHandler`)
 First step of the purchase: the fan selects a seat and clicks "comprar".
-* Input: `ReserveEventSeatCommand(EventId, EventSeatId, FullName, Email)`.
+* Input: `ReserveEventSeatCommand(EventId, EventSeatId, Email, BuyerToken?)`; a missing token issues a new one.
 * Locks the seat for the buyer during `EventSeatReservationPolicy.Duration`. If the same buyer already holds it, the lock is renewed. After locking, the seat is re-read so a seat sold in between is never left reserved.
-* Output: `ReservedEventSeat(EventSeatId, EventId, SeatNumber, ExpiresAtUtc)`.
+* Output: `ReservedEventSeat(EventSeatId, EventId, SeatNumber, ExpiresAtUtc, BuyerToken)`; the API returns the token only as the `booking_buyer` cookie.
 
 | Status | HTTP |
 | :--- | :---: |
@@ -112,7 +112,7 @@ First step of the purchase: the fan selects a seat and clicks "comprar".
 | `AlreadySold`, `ReservedByAnotherBuyer` | 409 |
 
 ### SP-05 — Purchase an event seat (`PurchaseEventSeatHandler`)
-* Input: `PurchaseEventSeatCommand(EventId, EventSeatId, FullName, Email, IdempotencyKey)`.
+* Input: `PurchaseEventSeatCommand(EventId, EventSeatId, FullName, Email, IdempotencyKey, BuyerToken?)`.
 * Flow:
   1. Validate holder data (400) and require a non-empty idempotency key (400).
   2. Check the event exists (404).
@@ -162,7 +162,7 @@ First step of the purchase: the fan selects a seat and clicks "comprar".
   * `KeyNotFoundException` -> `404 Not Found`
   * `ArgumentException` -> `400 Bad Request`
   * Unhandled exceptions -> `500 Internal Server Error`, including `InvalidOperationException` (e.g., an event seat whose venue seat is missing from the catalog is a server inconsistency, not a client error)
-* **CORS:** Enabled for local frontend development (`AllowAnyOrigin`, `AllowAnyHeader`, `AllowAnyMethod`).
+* **CORS:** `AllowAnyHeader`, `AllowAnyMethod`; origins from `Cors:AllowedOrigins` with credentials (needed for the `booking_buyer` cookie across origins). Without that setting, `AllowAnyOrigin` without credentials: the cookie then only works same-origin (e.g. front and API behind the same gateway).
 
 ---
 
