@@ -7,7 +7,8 @@ namespace BookingService.Application.EventSeats.Commands;
 /// <summary>
 /// First step of the purchase flow: the fan selects a seat and clicks "comprar".
 /// Validates the email (400), checks the event and event seat exist (404) and the seat is not sold,
-/// and reserves it for the buyer (identified by email) during <see cref="EventSeatReservationPolicy.Duration"/>.
+/// and reserves it for the buyer (identified by email and buyer token) during <see cref="EventSeatReservationPolicy.Duration"/>.
+/// Issues a new buyer token when the command has none.
 /// </summary>
 public sealed class ReserveEventSeatHandler
 {
@@ -57,7 +58,8 @@ public sealed class ReserveEventSeatHandler
         // Resolved before locking, so a seat with broken venue data is never left reserved.
         var seatNumber = await SeatNumberOfAsync(eventSeat, cancellationToken);
 
-        var holder = EventSeatLockHolder.From(command.Email);
+        var buyerToken = string.IsNullOrWhiteSpace(command.BuyerToken) ? EventSeatLockHolder.NewToken() : command.BuyerToken;
+        var holder = EventSeatLockHolder.From(command.Email, buyerToken);
         var expiresAtUtc = DateTime.UtcNow + EventSeatReservationPolicy.Duration;
 
         var lockResult = await _eventSeatLocks.TryAcquireAsync(
@@ -85,7 +87,7 @@ public sealed class ReserveEventSeatHandler
             return ReserveEventSeatResult.Failed(ReserveEventSeatStatus.AlreadySold);
         }
 
-        return ReserveEventSeatResult.Reserved(new ReservedEventSeat(current.Id, current.EventId, seatNumber, expiresAtUtc));
+        return ReserveEventSeatResult.Reserved(new ReservedEventSeat(current.Id, current.EventId, seatNumber, expiresAtUtc, buyerToken));
     }
 
     private async Task<string> SeatNumberOfAsync(EventSeat eventSeat, CancellationToken cancellationToken) =>
