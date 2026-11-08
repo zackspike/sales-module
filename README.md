@@ -28,7 +28,7 @@ booking-service/
 ├── BookingService.Infrastructure.Tests/ # xUnit tests for Infrastructure (PostgreSQL/Redis ones run when configured)
 ├── docker-compose.yml             # Local PostgreSQL and Redis dependencies
 ├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
-├── .agents/                       # Agent workflows and MCP integrations
+├── .agents/                       # Agent workflows
 ├── AGENTS.md                      # Global architecture rules & agent workflow protocol
 └── BookingService.slnx            # Solution file
 ```
