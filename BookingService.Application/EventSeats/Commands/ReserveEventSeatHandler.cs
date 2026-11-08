@@ -58,7 +58,7 @@ public sealed class ReserveEventSeatHandler
         // Resolved before locking, so a seat with broken venue data is never left reserved.
         var seatNumber = await SeatNumberOfAsync(eventSeat, cancellationToken);
 
-        var buyerToken = string.IsNullOrWhiteSpace(command.BuyerToken) ? EventSeatLockHolder.NewToken() : command.BuyerToken;
+        var buyerToken = EventSeatLockHolder.IsWellFormed(command.BuyerToken) ? command.BuyerToken! : EventSeatLockHolder.NewToken();
         var holder = EventSeatLockHolder.From(command.Email, buyerToken);
         var expiresAtUtc = DateTime.UtcNow + EventSeatReservationPolicy.Duration;
 

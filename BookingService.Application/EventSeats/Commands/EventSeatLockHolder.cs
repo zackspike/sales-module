@@ -14,4 +14,7 @@ internal static class EventSeatLockHolder
     public static string From(string email, string? buyerToken) => $"{buyerToken}:{email.Trim().ToLowerInvariant()}";
 
     public static string NewToken() => RandomNumberGenerator.GetHexString(64, lowercase: true);
+
+    // Same format as NewToken, so clients can't choose weak or oversized tokens.
+    public static bool IsWellFormed(string? token) => token is { Length: 64 } && token.All(char.IsAsciiHexDigitLower);
 }

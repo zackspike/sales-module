@@ -10,6 +10,7 @@ public class ReserveEventSeatHandlerTests
     private static readonly Guid EventId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid ZoneId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid VenueSeatId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private const string Token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     [Fact]
     public async Task Available_seat_is_reserved_with_normalized_holder()
@@ -100,17 +101,36 @@ public class ReserveEventSeatHandlerTests
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
-        locks.TryAcquire(seat.Id, "token:juan@example.com", TimeSpan.FromMinutes(10));
+        locks.TryAcquire(seat.Id, $"{Token}:juan@example.com", TimeSpan.FromMinutes(10));
         locks.ResetAcquireCalls();
 
         var result = await Handler(new FakeEventSeatRepository(seat), locks)
-            .HandleAsync(Command(seat.Id, " JUAN@Example.com ", "token"), CancellationToken.None);
+            .HandleAsync(Command(seat.Id, " JUAN@Example.com ", Token), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.Reserved, result.Status);
-        Assert.Equal("token", result.Seat!.BuyerToken);
+        Assert.Equal(Token, result.Seat!.BuyerToken);
         Assert.Equal(1, locks.AcquireCalls);
         Assert.Equal(EventSeatReservationPolicy.Duration, locks.LastDuration);
-        Assert.Equal("token:juan@example.com", locks.GetHolderIdentifier(seat.Id));
+        Assert.Equal($"{Token}:juan@example.com", locks.GetHolderIdentifier(seat.Id));
+    }
+
+    [Theory]
+    [InlineData("token")]
+    [InlineData("0123456789ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef")]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0")]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg")]
+    public async Task Malformed_buyer_token_is_replaced_with_a_new_one(string token)
+    {
+        var seat = Seat();
+        var locks = new FakeEventSeatLockStore();
+
+        var result = await Handler(new FakeEventSeatRepository(seat), locks)
+            .HandleAsync(Command(seat.Id, token: token), CancellationToken.None);
+
+        Assert.Equal(ReserveEventSeatStatus.Reserved, result.Status);
+        Assert.NotEqual(token, result.Seat!.BuyerToken);
+        Assert.Matches("^[0-9a-f]{64}$", result.Seat.BuyerToken);
+        Assert.Equal($"{result.Seat.BuyerToken}:jane@example.com", locks.GetHolderIdentifier(seat.Id));
     }
 
     [Fact]
