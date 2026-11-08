@@ -14,6 +14,11 @@ namespace BookingService.Api.Endpoints;
 /// </summary>
 public static class TicketEndpoints
 {
+    /// <summary>
+    /// HttpOnly cookie holding the buyer token issued on reserve and required to release or purchase.
+    /// </summary>
+    public const string BuyerCookie = "booking_buyer";
+
     public static IEndpointRouteBuilder MapTicketEndpoints(this IEndpointRouteBuilder app)
     {
         var tickets = app.MapGroup("/events/{eventId:guid}/tickets").WithTags("Tickets");
@@ -35,7 +40,7 @@ public static class TicketEndpoints
         tickets.MapPost("/{ticketId:guid}/reserve", ReserveSeat)
             .WithName("ReserveSeat")
             .WithSummary("Reserve an event seat")
-            .WithDescription("Locks a seat for the buyer identified by email for 10 minutes. Reserving again with the same email renews the reservation. The seat must be reserved before it can be purchased.")
+            .WithDescription("Locks a seat for the buyer identified by email and the booking_buyer cookie for 10 minutes; the cookie (HttpOnly) is set on the first reservation. Reserving again with the same email and cookie renews the reservation. The seat must be reserved before it can be purchased.")
             .Produces<SeatReservationResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound)
@@ -45,7 +50,7 @@ public static class TicketEndpoints
         tickets.MapPost("/{ticketId:guid}/release", ReleaseSeat)
             .WithName("ReleaseSeat")
             .WithSummary("Release a seat reservation")
-            .WithDescription("Releases the seat reserved with the given email so other buyers can take it. Succeeds if the seat is not reserved (e.g. the reservation expired).")
+            .WithDescription("Releases the seat reserved with the given email and the booking_buyer cookie so other buyers can take it. Succeeds if the seat is not reserved (e.g. the reservation expired).")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound)
@@ -55,7 +60,7 @@ public static class TicketEndpoints
         tickets.MapPost("/{ticketId:guid}/purchase", PurchaseTicket)
             .WithName("PurchaseTicket")
             .WithSummary("Purchase an event seat")
-            .WithDescription("Purchases a seat previously reserved with the same email. Requires an X-Idempotency-Key header. If the key was already used for this seat, safely returns the existing ticket (200 OK).")
+            .WithDescription("Purchases a seat previously reserved with the same email and booking_buyer cookie. Requires an X-Idempotency-Key header. If the key was already used for this seat, safely returns the existing ticket (200 OK).")
             .Produces<TicketResponse>(StatusCodes.Status201Created)
             .Produces<TicketResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
@@ -131,6 +136,7 @@ public static class TicketEndpoints
     /// <param name="eventId">The unique identifier of the event.</param>
     /// <param name="ticketId">The unique identifier of the ticket (seat) to reserve.</param>
     /// <param name="request">Reservation request containing the buyer's email.</param>
+    /// <param name="httpContext">Reads the buyer cookie and sets it on success.</param>
     /// <param name="handler">Application command handler.</param>
     /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
     /// <response code="200">Seat reserved (or reservation renewed) for the buyer.</response>
@@ -142,12 +148,26 @@ public static class TicketEndpoints
         Guid eventId,
         Guid ticketId,
         ReserveSeatRequest request,
+        HttpContext httpContext,
         ReserveEventSeatHandler handler,
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(
-            new ReserveEventSeatCommand(eventId, ticketId, request.Email),
+            new ReserveEventSeatCommand(eventId, ticketId, request.Email, httpContext.Request.Cookies[BuyerCookie]),
             cancellationToken);
+
+        if (result.Status == ReserveEventSeatStatus.Reserved)
+        {
+            // Session cookie: the reservation itself expires on its own.
+            httpContext.Response.Cookies.Append(BuyerCookie, result.Seat!.BuyerToken, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Strict,
+                Path = "/events",
+                IsEssential = true
+            });
+        }
 
         return result.Status switch
         {
@@ -169,22 +189,24 @@ public static class TicketEndpoints
     /// <param name="eventId">The unique identifier of the event.</param>
     /// <param name="ticketId">The unique identifier of the ticket (seat) to release.</param>
     /// <param name="request">Release request containing the email the seat was reserved with.</param>
+    /// <param name="httpRequest">Carries the buyer cookie set on reserve.</param>
     /// <param name="handler">Application command handler.</param>
     /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
     /// <response code="204">The buyer no longer holds the seat.</response>
     /// <response code="400">Request validation failed.</response>
     /// <response code="404">Event or ticket not found in catalog.</response>
-    /// <response code="409">Seat is already sold or reserved by another buyer.</response>
+    /// <response code="409">Seat is already sold or reserved by another buyer (including the same email without its buyer cookie).</response>
     /// <response code="500">Unhandled server error captured by global exception middleware.</response>
     private static async Task<IResult> ReleaseSeat(
         Guid eventId,
         Guid ticketId,
         ReleaseSeatRequest request,
+        HttpRequest httpRequest,
         ReleaseEventSeatHandler handler,
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(
-            new ReleaseEventSeatCommand(eventId, ticketId, request.Email),
+            new ReleaseEventSeatCommand(eventId, ticketId, request.Email, httpRequest.Cookies[BuyerCookie]),
             cancellationToken);
 
         return result.Status switch
@@ -206,12 +228,13 @@ public static class TicketEndpoints
     /// <param name="ticketId">The unique identifier of the ticket (seat) to purchase.</param>
     /// <param name="request">Purchase request containing attendee's full name and email.</param>
     /// <param name="idempotencyKey">Client-provided UUID in the X-Idempotency-Key header. Required to ensure safe replay.</param>
+    /// <param name="httpRequest">Carries the buyer cookie set on reserve.</param>
     /// <param name="handler">Application command handler.</param>
     /// <param name="cancellationToken">Token cancelled when the HTTP request is aborted.</param>
     /// <response code="201">New ticket successfully purchased and issued.</response>
     /// <response code="200">Ticket successfully returned on idempotent replay of an already processed purchase.</response>
     /// <response code="400">Request validation failed or X-Idempotency-Key header is missing/invalid.</response>
-    /// <response code="403">The seat is not reserved by this buyer, or the reservation expired.</response>
+    /// <response code="403">The seat is not reserved by this buyer (email and buyer cookie), or the reservation expired.</response>
     /// <response code="404">Event or ticket not found in catalog.</response>
     /// <response code="409">Seat is already sold or the idempotency key was previously used with different details.</response>
     /// <response code="500">Unhandled server error captured by global exception middleware.</response>
@@ -220,6 +243,7 @@ public static class TicketEndpoints
         Guid ticketId,
         PurchaseTicketRequest request,
         [FromHeader(Name = "X-Idempotency-Key")] Guid? idempotencyKey,
+        HttpRequest httpRequest,
         PurchaseEventSeatHandler handler,
         CancellationToken cancellationToken)
     {
@@ -229,7 +253,8 @@ public static class TicketEndpoints
                 ticketId,
                 request.FullName,
                 request.Email,
-                idempotencyKey ?? Guid.Empty),
+                idempotencyKey ?? Guid.Empty,
+                httpRequest.Cookies[BuyerCookie]),
             cancellationToken);
 
         return result.Status switch

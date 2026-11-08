@@ -1,11 +1,20 @@
+using System.Security.Cryptography;
+
 namespace BookingService.Application.EventSeats.Commands;
 
 /// <summary>
-/// The buyer identity stored in an event seat lock (see <see cref="Abstractions.IEventSeatLockStore"/>).
-/// As for MVP it is the buyer's email, trimmed and case-insensitive, so the reservation and the purchase
-/// requests produce the same identifier. In a future version it could be a user id or a reservation token.
+/// The buyer identity stored in an event seat lock (see <see cref="Abstractions.IEventSeatLockStore"/>):
+/// <c>{buyerToken}:{email}</c>. The buyer token is a random secret issued by <see cref="ReserveEventSeatHandler"/>
+/// and kept by the buyer's browser, so knowing someone's email is not enough to release or buy their reservation.
+/// The email (trimmed, case-insensitive) keeps the rule that the seat is bought with the email it was reserved with.
 /// </summary>
 internal static class EventSeatLockHolder
 {
-    public static string From(string email) => email.Trim().ToLowerInvariant();
+    // A missing token yields ":email", which never matches a lock: reserve always uses a non-empty token.
+    public static string From(string email, string? buyerToken) => $"{buyerToken}:{email.Trim().ToLowerInvariant()}";
+
+    public static string NewToken() => RandomNumberGenerator.GetHexString(64, lowercase: true);
+
+    // Same format as NewToken, so clients can't choose weak or oversized tokens.
+    public static bool IsWellFormed(string? token) => token is { Length: 64 } && token.All(char.IsAsciiHexDigitLower);
 }
