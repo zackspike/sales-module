@@ -95,11 +95,11 @@ public class RedisStoreTests
     }
 
     [RedisFact]
-    public async Task Available_seats_cache_round_trips_and_invalidates()
+    public async Task Event_seats_cache_round_trips_and_invalidates()
     {
-        var cache = new RedisAvailableSeatsCache(Redis.Value);
+        var cache = new RedisEventSeatsCache(Redis.Value);
         var eventId = Guid.NewGuid();
-        var seats = new List<AvailableEventSeat> { new(_eventSeatId, "A-1") };
+        var seats = new List<EventSeatAvailability> { new(_eventSeatId, "A-1", EventSeatAvailabilityStatus.Sold) };
 
         await cache.SetAsync(eventId, seats, CancellationToken.None);
         Assert.Equal(seats, await cache.GetAsync(eventId, CancellationToken.None));

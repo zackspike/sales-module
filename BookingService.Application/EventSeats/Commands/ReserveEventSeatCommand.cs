@@ -9,5 +9,4 @@ namespace BookingService.Application.EventSeats.Commands;
 public sealed record ReserveEventSeatCommand(
     Guid EventId,
     Guid EventSeatId,
-    string FullName,
     string Email);

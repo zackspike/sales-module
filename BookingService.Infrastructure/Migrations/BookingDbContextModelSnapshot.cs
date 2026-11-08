@@ -136,6 +136,9 @@ namespace BookingService.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IdempotencyKey\" != '00000000-0000-0000-0000-000000000000'");
 
+                    b.HasIndex("TicketCode")
+                        .IsUnique();
+
                     b.ToTable("tickets", (string)null);
                 });
 

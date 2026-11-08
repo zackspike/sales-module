@@ -69,6 +69,33 @@ public sealed class PostgresEventSeatRepositoryTests : IDisposable
         Assert.Single(results, s => s == PurchaseEventSeatStatus.IdempotencyKeyConflict);
     }
 
+    [Fact]
+    public async Task Sale_is_found_by_its_ticket_code()
+    {
+        var (eventId, seats) = SeedEvent(1);
+        string ticketCode;
+        await using (var db = new BookingDbContext(_options))
+        {
+            var outcome = await new PostgresEventSeatRepository(db).SellOnceAsync(
+                Guid.NewGuid(),
+                eventId,
+                seats[0],
+                s => s.Sell("Juan Perez", "juan.perez@example.com", DateTime.UtcNow),
+                CancellationToken.None);
+            ticketCode = outcome.Sale!.Ticket.TicketCode;
+        }
+
+        await using var readDb = new BookingDbContext(_options);
+        var repository = new PostgresEventSeatRepository(readDb);
+        var found = await repository.GetSaleByTicketCodeAsync(ticketCode, CancellationToken.None);
+
+        Assert.NotNull(found);
+        Assert.Equal(seats[0], found.Seat.Id);
+        Assert.Equal(EventSeatStatus.Sold, found.Seat.Status);
+        Assert.Equal("Juan Perez", found.Ticket.HolderName);
+        Assert.Null(await repository.GetSaleByTicketCodeAsync("TK-unknown", CancellationToken.None));
+    }
+
     // Every buyer uses the same email, so all of them hold the seat lock and the database decides.
     private async Task<PurchaseEventSeatStatus[]> Race(
         int buyers,

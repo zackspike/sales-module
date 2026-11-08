@@ -7,7 +7,7 @@ namespace BookingService.Infrastructure.Caching;
 /// Null Object pattern implementation used when Redis is not configured: every lookup misses,
 /// so handlers fall back to the durable repository as the source of truth for availability and idempotency.
 /// </summary>
-public sealed class NoCache : IIdempotencyStore, IAvailableEventSeatsCache
+public sealed class NoCache : IIdempotencyStore, IEventSeatsCache
 {
     public Task<IdempotencyRecord?> GetIdempotencyRecordAsync(
         Guid idempotencyKey,
@@ -22,13 +22,13 @@ public sealed class NoCache : IIdempotencyStore, IAvailableEventSeatsCache
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<AvailableEventSeat>?> GetAsync(
+    public Task<IReadOnlyList<EventSeatAvailability>?> GetAsync(
         Guid eventId,
-        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<AvailableEventSeat>?>(null);
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<EventSeatAvailability>?>(null);
 
     public Task SetAsync(
         Guid eventId,
-        IReadOnlyList<AvailableEventSeat> seats,
+        IReadOnlyList<EventSeatAvailability> seats,
         CancellationToken cancellationToken)
     {
         return Task.CompletedTask;

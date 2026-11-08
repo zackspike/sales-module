@@ -69,6 +69,14 @@ public sealed class FakeEventSeatRepository(params EventSeat[] initialSeats) : I
         }
     }
 
+    public Task<EventSeatSale?> GetSaleByTicketCodeAsync(string ticketCode, CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            return Task.FromResult(_salesByKey.Values.FirstOrDefault(sale => sale.Ticket.TicketCode == ticketCode));
+        }
+    }
+
     public Task<EventSeatSaleOutcome> SellOnceAsync(
         Guid idempotencyKey,
         Guid eventId,
@@ -107,11 +115,11 @@ public sealed class FakeEventSeatRepository(params EventSeat[] initialSeats) : I
         }
     }
 
-    public void RememberSale(Guid idempotencyKey, EventSeat seat)
+    public EventSeatSale RememberSale(Guid idempotencyKey, EventSeat seat)
     {
         lock (_sync)
         {
-            _salesByKey[idempotencyKey] = new EventSeatSale(
+            return _salesByKey[idempotencyKey] = new EventSeatSale(
                 seat,
                 seat.Sell("original", "original@example.com", DateTime.UtcNow));
         }

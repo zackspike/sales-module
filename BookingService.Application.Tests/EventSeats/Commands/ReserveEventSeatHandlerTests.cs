@@ -18,7 +18,7 @@ public class ReserveEventSeatHandlerTests
         var locks = new FakeEventSeatLockStore();
         var before = DateTime.UtcNow;
         var result = await Handler(new FakeEventSeatRepository(seat), locks)
-            .HandleAsync(Command(seat.Id, "Jane Doe", " JUAN.Perez@Example.com "), CancellationToken.None);
+            .HandleAsync(Command(seat.Id, " JUAN.Perez@Example.com "), CancellationToken.None);
         var after = DateTime.UtcNow;
 
         Assert.Equal(ReserveEventSeatStatus.Reserved, result.Status);
@@ -35,15 +35,16 @@ public class ReserveEventSeatHandlerTests
     }
 
     [Fact]
-    public async Task Invalid_holder_does_not_touch_repository_or_locks()
+    public async Task Invalid_email_does_not_touch_repository_or_locks()
     {
         var seat = Seat();
         var repository = new FakeEventSeatRepository(seat);
         var locks = new FakeEventSeatLockStore();
 
-        var result = await Handler(repository, locks).HandleAsync(Command(seat.Id, "", "bad"), CancellationToken.None);
+        var result = await Handler(repository, locks).HandleAsync(Command(seat.Id, "bad"), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.Invalid, result.Status);
+        Assert.Equal("email", Assert.Single(result.Errors.Keys));
         Assert.Empty(repository.RequestedIds);
         Assert.Empty(locks.Holders);
     }
@@ -102,7 +103,7 @@ public class ReserveEventSeatHandlerTests
         locks.ResetAcquireCalls();
 
         var result = await Handler(new FakeEventSeatRepository(seat), locks)
-            .HandleAsync(Command(seat.Id, "Juan", " JUAN@Example.com "), CancellationToken.None);
+            .HandleAsync(Command(seat.Id, " JUAN@Example.com "), CancellationToken.None);
 
         Assert.Equal(ReserveEventSeatStatus.Reserved, result.Status);
         Assert.Equal(1, locks.AcquireCalls);
@@ -154,11 +155,8 @@ public class ReserveEventSeatHandlerTests
         Assert.Null(locks.GetHolderIdentifier(seat.Id));
     }
 
-    private static ReserveEventSeatCommand Command(
-        Guid seatId,
-        string name = "Jane Doe",
-        string email = "jane@example.com") =>
-        new(EventId, seatId, name, email);
+    private static ReserveEventSeatCommand Command(Guid seatId, string email = "jane@example.com") =>
+        new(EventId, seatId, email);
 
     private static ReserveEventSeatHandler Handler(
         FakeEventSeatRepository repository,

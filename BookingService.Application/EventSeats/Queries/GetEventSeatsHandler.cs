@@ -6,41 +6,41 @@ using BookingService.Domain.Venues;
 namespace BookingService.Application.EventSeats.Queries;
 
 /// <summary>
-/// Handles retrieving the available event seats of an event (SP-04 / APP-01). The seats available in the
-/// repository are served from <see cref="IAvailableEventSeatsCache"/> when possible, and seats currently
-/// reserved by a fan (seat lock) are left out.
+/// Handles listing all event seats of an event with their availability (SP-04 / APP-01). The seats and their
+/// stored status are served from <see cref="IEventSeatsCache"/> when possible, and seats that are not sold but
+/// currently locked by a fan are reported as <see cref="EventSeatAvailabilityStatus.Reserved"/>.
 /// </summary>
-public sealed class GetAvailableEventSeatsHandler
+public sealed class GetEventSeatsHandler
 {
     private readonly IEventSeatRepository _eventSeatRepository;
     private readonly IEventCatalog _eventCatalog;
     private readonly IEventSeatLockStore _eventSeatLocks;
-    private readonly IAvailableEventSeatsCache _availableEventSeatsCache;
+    private readonly IEventSeatsCache _eventSeatsCache;
     private readonly IVenueSeatCatalog _venueSeatCatalog;
 
-    public GetAvailableEventSeatsHandler(
+    public GetEventSeatsHandler(
         IEventSeatRepository eventSeatRepository,
         IEventCatalog eventCatalog,
-        IAvailableEventSeatsCache availableEventSeatsCache,
+        IEventSeatsCache eventSeatsCache,
         IEventSeatLockStore eventSeatLockStore,
         IVenueSeatCatalog venueSeatCatalog)
     {
         _eventSeatRepository = eventSeatRepository;
         _eventCatalog = eventCatalog;
-        _availableEventSeatsCache = availableEventSeatsCache;
+        _eventSeatsCache = eventSeatsCache;
         _eventSeatLocks = eventSeatLockStore;
         _venueSeatCatalog = venueSeatCatalog;
     }
 
     /// <summary>
-    /// Returns the available event seats of the event sorted by seat number, or null if the event does not exist.
+    /// Returns all event seats of the event sorted by seat number, or null if the event does not exist.
     /// </summary>
-    public async Task<IReadOnlyList<AvailableEventSeat>?> HandleAsync(
-        GetAvailableEventSeatsQuery query,
+    public async Task<IReadOnlyList<EventSeatAvailability>?> HandleAsync(
+        GetEventSeatsQuery query,
         CancellationToken cancellationToken)
     {
         // Only existing events are cached, so a hit skips the event check too.
-        var eventSeats = await _availableEventSeatsCache.GetAsync(query.EventId, cancellationToken);
+        var eventSeats = await _eventSeatsCache.GetAsync(query.EventId, cancellationToken);
         if (eventSeats is null)
         {
             if (!await _eventCatalog.ExistsAsync(query.EventId, cancellationToken))
@@ -48,27 +48,33 @@ public sealed class GetAvailableEventSeatsHandler
                 return null;
             }
 
-            var available = (await _eventSeatRepository.GetByEventAsync(query.EventId, cancellationToken))
-                .Where(avs => avs.Status == EventSeatStatus.Available)
-                .ToList();
+            var stored = await _eventSeatRepository.GetByEventAsync(query.EventId, cancellationToken);
 
-            var venueSeatIds = available.Select(avs => avs.VenueSeatId).ToList();
+            var venueSeatIds = stored.Select(es => es.VenueSeatId).ToList();
             var venueSeats = (await _venueSeatCatalog.GetByIdsAsync(venueSeatIds, cancellationToken))
                 .ToDictionary(vs => vs.Id);
 
-            eventSeats = available
-                .Select(avs => new AvailableEventSeat(avs.Id, SeatNumberOf(avs, venueSeats)))
-                .OrderBy(avs => avs.SeatNumber, StringComparer.OrdinalIgnoreCase)
+            eventSeats = stored
+                .Select(es => new EventSeatAvailability(es.Id, SeatNumberOf(es, venueSeats), StoredStatusOf(es)))
+                .OrderBy(es => es.SeatNumber, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            await _availableEventSeatsCache.SetAsync(query.EventId, eventSeats, cancellationToken);
+            await _eventSeatsCache.SetAsync(query.EventId, eventSeats, cancellationToken);
         }
 
         var reserved = await _eventSeatLocks.GetLockedEventSeatIdsAsync(
-            eventSeats.Select(s => s.EventSeatId).ToList(),
+            eventSeats.Where(s => s.Status == EventSeatAvailabilityStatus.Available).Select(s => s.EventSeatId).ToList(),
             cancellationToken);
 
-        return eventSeats.Where(s => !reserved.Contains(s.EventSeatId)).ToList();
+        return eventSeats
+            .Select(s => reserved.Contains(s.EventSeatId) ? s with { Status = EventSeatAvailabilityStatus.Reserved } : s)
+            .ToList();
     }
+
+    private static EventSeatAvailabilityStatus StoredStatusOf(EventSeat seat) => seat.Status switch
+    {
+        EventSeatStatus.Sold => EventSeatAvailabilityStatus.Sold,
+        _ => EventSeatAvailabilityStatus.Available
+    };
 
     private static string SeatNumberOf(EventSeat seat, IReadOnlyDictionary<Guid, VenueSeat> venueSeats) =>
         venueSeats.TryGetValue(seat.VenueSeatId, out var venueSeat)

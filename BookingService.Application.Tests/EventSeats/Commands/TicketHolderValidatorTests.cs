@@ -49,11 +49,34 @@ public class TicketHolderValidatorTests
     [InlineData("a@")]
     [InlineData("@b.com")]
     [InlineData("Jane <jane@example.com>")]
+    [InlineData("jane@localhost")]
+    [InlineData("a@b")]
+    [InlineData("\"jane doe\"@example.com")]
+    [InlineData("jane@-example.com")]
+    [InlineData("jane@example-.com")]
+    [InlineData("jane@example.c")]
+    [InlineData("jane@example..com")]
+    [InlineData("jane..doe@example.com")]
+    [InlineData(".jane@example.com")]
+    [InlineData("jane@example.com.")]
+    [InlineData("jane doe@example.com")]
     public void Invalid_email_returns_email_error(string? email)
     {
         var errors = TicketHolderValidator.Validate("Jane Doe", email!);
 
         Assert.Contains("email", errors.Keys);
+    }
+
+    [Theory]
+    [InlineData("jane.doe+tag@example.com")]
+    [InlineData("j_o-e@sub.example.co")]
+    [InlineData("JANE@EXAMPLE.COM")]
+    [InlineData("jane@my-domain.io")]
+    [InlineData("jane@example.xn--p1ai")]
+    [InlineData("jane@example.xn--fiqs8s")]
+    public void Valid_email_has_no_errors(string email)
+    {
+        Assert.Empty(TicketHolderValidator.ValidateEmail(email));
     }
 
     [Fact]
@@ -77,6 +100,13 @@ public class TicketHolderValidatorTests
 
         Assert.Contains("fullName", errors.Keys);
         Assert.Contains("email", errors.Keys);
+    }
+
+    [Fact]
+    public void Email_only_validation_ignores_full_name()
+    {
+        Assert.Empty(TicketHolderValidator.ValidateEmail(" jane@example.com "));
+        Assert.Equal("email", Assert.Single(TicketHolderValidator.ValidateEmail("not-an-email").Keys));
     }
 
     private static string MaxLengthEmail()

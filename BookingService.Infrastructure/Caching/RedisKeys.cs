@@ -11,5 +11,5 @@ internal static class RedisKeys
 
     public static RedisKey Idempotency(Guid idempotencyKey) => $"booking:idempotency:{idempotencyKey}";
 
-    public static RedisKey AvailableSeats(Guid eventId) => $"booking:event:{eventId}:available-seats";
+    public static RedisKey EventSeats(Guid eventId) => $"booking:event:{eventId}:seats";
 }
