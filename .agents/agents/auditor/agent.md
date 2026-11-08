@@ -32,8 +32,8 @@ Audit against:
 - `.agents/current/editor-task.md`
 - current repository files
 
-Use the Notion source when the request depends on project-specific
-requirements documented there.
+Use the Design Decisions in `AGENTS.md` when the request depends on
+project-specific requirements documented there.
 
 ## DDD Architecture
 
