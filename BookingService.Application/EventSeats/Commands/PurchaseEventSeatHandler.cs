@@ -8,7 +8,7 @@ namespace BookingService.Application.EventSeats.Commands;
 /// <summary>
 /// Buys a reserved event seat and issues its ticket (SP-05 / SP-06 / APP-04): validates name and email
 /// (400), checks the event exists (404), answers duplicated requests from the idempotency store or the repository,
-/// requires the buyer to hold the seat lock taken by <see cref="ReserveEventSeatHandler"/> (403), and then
+/// requires the buyer (email and buyer token) to hold the seat lock taken by <see cref="ReserveEventSeatHandler"/> (403), and then
 /// sells the seat atomically and idempotently through <see cref="IEventSeatRepository.SellOnceAsync"/>.
 /// The "a seat is sold only once" rule lives in <see cref="EventSeat.Sell"/>.
 /// </summary>
@@ -90,7 +90,7 @@ public sealed class PurchaseEventSeatHandler
             return await SoldSeatResultAsync(command, seatNumber, cancellationToken);
         }
 
-        var holder = EventSeatLockHolder.From(email);
+        var holder = EventSeatLockHolder.From(email, command.BuyerToken);
         if (await _eventSeatLocks.GetHolderIdentifierAsync(eventSeat.Id, cancellationToken) != holder)
         {
             // A concurrent purchase may have sold the seat and released its lock after the check

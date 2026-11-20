@@ -29,7 +29,8 @@ public sealed class PostgresEventSeatRepositoryTests : IDisposable
             seats[0],
             "Juan Perez",
             "juan.perez@example.com",
-            Guid.NewGuid()));
+            Guid.NewGuid(),
+            "token"));
 
         Assert.Single(results, s => s == PurchaseEventSeatStatus.Purchased);
         Assert.Equal(19, results.Count(s => s == PurchaseEventSeatStatus.AlreadySold));
@@ -46,7 +47,8 @@ public sealed class PostgresEventSeatRepositoryTests : IDisposable
             seats[0],
             "Juan Perez",
             "juan.perez@example.com",
-            key));
+            key,
+            "token"));
 
         Assert.Single(results, s => s == PurchaseEventSeatStatus.Purchased);
         Assert.Equal(9, results.Count(s => s == PurchaseEventSeatStatus.Replayed));
@@ -63,7 +65,8 @@ public sealed class PostgresEventSeatRepositoryTests : IDisposable
             seats[i],
             "Juan Perez",
             "juan.perez@example.com",
-            key));
+            key,
+            "token"));
 
         Assert.Single(results, s => s == PurchaseEventSeatStatus.Purchased);
         Assert.Single(results, s => s == PurchaseEventSeatStatus.IdempotencyKeyConflict);
@@ -96,7 +99,7 @@ public sealed class PostgresEventSeatRepositoryTests : IDisposable
         Assert.Null(await repository.GetSaleByTicketCodeAsync("TK-unknown", CancellationToken.None));
     }
 
-    // Every buyer uses the same email, so all of them hold the seat lock and the database decides.
+    // Every buyer uses the same email and buyer token, so all of them hold the seat lock and the database decides.
     private async Task<PurchaseEventSeatStatus[]> Race(
         int buyers,
         Func<int, PurchaseEventSeatCommand> command)
@@ -106,7 +109,7 @@ public sealed class PostgresEventSeatRepositoryTests : IDisposable
         {
             await locks.TryAcquireAsync(
                 command(i).EventSeatId,
-                "juan.perez@example.com",
+                "token:juan.perez@example.com",
                 TimeSpan.FromMinutes(10),
                 CancellationToken.None);
         }

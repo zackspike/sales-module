@@ -101,7 +101,7 @@ public class PurchaseEventSeatHandlerTests
             new FakeIdempotencyStore(),
             new FakeEventSeatsCache(),
             NullLogger<PurchaseEventSeatHandler>.Instance).HandleAsync(
-                new(OtherEventId, Guid.NewGuid(), "Jane Doe", "jane@example.com", Guid.NewGuid()), CancellationToken.None);
+                new(OtherEventId, Guid.NewGuid(), "Jane Doe", "jane@example.com", Guid.NewGuid(), "token"), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.EventNotFound, result.Status);
         Assert.Empty(repository.RequestedIds);
@@ -166,10 +166,22 @@ public class PurchaseEventSeatHandlerTests
     {
         var seat = Seat();
         var locks = new FakeEventSeatLockStore();
-        locks.TryAcquire(seat.Id, "other@example.com", TimeSpan.FromMinutes(10));
+        locks.TryAcquire(seat.Id, "other-token:other@example.com", TimeSpan.FromMinutes(10));
 
         var result = await Handler(new FakeEventSeatRepository(seat), locks)
             .HandleAsync(Command(seat.Id, Guid.NewGuid(), "Jane", " JANE@example.com "), CancellationToken.None);
+
+        Assert.Equal(PurchaseEventSeatStatus.ReservationRequired, result.Status);
+        Assert.Equal(EventSeatStatus.Available, seat.Status);
+    }
+
+    [Fact]
+    public async Task Same_email_without_the_buyer_token_requires_reservation()
+    {
+        var seat = Seat();
+
+        var result = await Handler(new FakeEventSeatRepository(seat), BuyerLock(seat))
+            .HandleAsync(Command(seat.Id, token: "stolen-guess"), CancellationToken.None);
 
         Assert.Equal(PurchaseEventSeatStatus.ReservationRequired, result.Status);
         Assert.Equal(EventSeatStatus.Available, seat.Status);
@@ -279,7 +291,7 @@ public class PurchaseEventSeatHandlerTests
             }
         };
         var locks = new FakeEventSeatLockStore();
-        locks.TryAcquire(seat.Id, "other@example.com", TimeSpan.FromMinutes(10));
+        locks.TryAcquire(seat.Id, "other-token:other@example.com", TimeSpan.FromMinutes(10));
 
         var result = await Handler(repository, locks).HandleAsync(Command(seat.Id, key), CancellationToken.None);
 
@@ -295,7 +307,7 @@ public class PurchaseEventSeatHandlerTests
             AfterSecondRead = current => current?.Sell("other", "other@example.com", DateTime.UtcNow)
         };
         var locks = new FakeEventSeatLockStore();
-        locks.TryAcquire(seat.Id, "other@example.com", TimeSpan.FromMinutes(10));
+        locks.TryAcquire(seat.Id, "other-token:other@example.com", TimeSpan.FromMinutes(10));
 
         var result = await Handler(repository, locks).HandleAsync(Command(seat.Id), CancellationToken.None);
 
@@ -348,13 +360,14 @@ public class PurchaseEventSeatHandlerTests
         Guid seatId,
         Guid? key = null,
         string name = "Jane Doe",
-        string email = "jane@example.com") =>
-        new(EventId, seatId, name, email, key ?? Guid.NewGuid());
+        string email = "jane@example.com",
+        string? token = "token") =>
+        new(EventId, seatId, name, email, key ?? Guid.NewGuid(), token);
 
     private static FakeEventSeatLockStore BuyerLock(EventSeat seat)
     {
         var locks = new FakeEventSeatLockStore();
-        locks.TryAcquire(seat.Id, "jane@example.com", TimeSpan.FromMinutes(10));
+        locks.TryAcquire(seat.Id, "token:jane@example.com", TimeSpan.FromMinutes(10));
         return locks;
     }
 

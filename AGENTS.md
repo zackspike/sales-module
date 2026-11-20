@@ -202,6 +202,12 @@ for the business model and use cases.
 - **`InvalidOperationException` is a 500, not a 400:** it signals a server-side
   inconsistency (e.g. an event seat whose venue seat is missing from the catalog),
   not a client error. Only `ArgumentException` maps to 400.
+- **Buyer identity is `{buyerToken}:{email}`, not the email alone:** knowing a buyer's
+  email must not be enough to release, take over or buy their reservation. The token
+  is a server-issued random secret (64 hex chars, CSPRNG) kept only in the
+  `booking_buyer` cookie (HttpOnly, Secure, SameSite=Strict, Path=/events); a cookie
+  with any other format is ignored and a new token is issued. Cross-origin fronts need
+  `Cors:AllowedOrigins` (credentialed CORS); without it the cookie only works same-origin.
 - **Data ownership:** `Event` belongs to EventService and `VenueSeat`/`SeatZone` to
   VenueService. BookingService only reads them through `IEventCatalog` and
   `IVenueSeatCatalog`. In-memory catalogs are local test mocks, not an integration.

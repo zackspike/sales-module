@@ -6,7 +6,7 @@ namespace BookingService.Application.EventSeats.Commands;
 /// <summary>
 /// Lets a fan give up the seat reserved with <see cref="ReserveEventSeatHandler"/> before the reservation expires.
 /// Validates the email (400), checks the event and event seat exist (404) and the seat is not sold (409), and
-/// removes the seat lock only if this buyer holds it (409 otherwise). Releasing a seat that is not reserved
+/// removes the seat lock only if this buyer (email and buyer token) holds it (409 otherwise). Releasing a seat that is not reserved
 /// succeeds, so retries and expired reservations need no special handling.
 /// </summary>
 public sealed class ReleaseEventSeatHandler
@@ -51,7 +51,7 @@ public sealed class ReleaseEventSeatHandler
             return ReleaseEventSeatResult.Of(ReleaseEventSeatStatus.AlreadySold);
         }
 
-        var holder = EventSeatLockHolder.From(command.Email);
+        var holder = EventSeatLockHolder.From(command.Email, command.BuyerToken);
         var currentHolder = await _eventSeatLocks.GetHolderIdentifierAsync(eventSeat.Id, cancellationToken);
         if (currentHolder is not null && currentHolder != holder)
         {

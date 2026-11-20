@@ -3,7 +3,7 @@ namespace BookingService.Application.Abstractions;
 /// <summary>
 /// Distributed, expiring event seat locks (<c>event-seat-id → holderIdentifier</c>) that give one fan exclusive
 /// right to buy a seat for a limited time. Every operation is atomic, so concurrent fans can't both win the same seat.
-/// As for MVP, the holderIdentifier is the fan's email address. In a future version, it could be a user id or session id.
+/// The holderIdentifier is opaque here; see <see cref="EventSeats.Commands.EventSeatLockHolder"/> for how it is built.
 /// </summary>
 public interface IEventSeatLockStore
 {
