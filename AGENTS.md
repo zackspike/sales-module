@@ -32,14 +32,15 @@ Requires the .NET 10 SDK and Docker.
 | Lint | `dotnet format --verify-no-changes` |
 | Test | `dotnet test` |
 | Start PostgreSQL and Redis | `docker compose up -d` |
-| Apply migrations (incl. seed data) | `dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api` |
+| Apply migrations | `dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api` |
 | Add a migration | `dotnet ef migrations add <Name> --project BookingService.Infrastructure --startup-project BookingService.Api` |
 | Run API | `dotnet run --project BookingService.Api` |
 
 PostgreSQL integration tests require Docker: `PostgresFixture` starts a disposable container with
 Testcontainers, migrates it and removes it afterwards; they never use `ConnectionStrings__DefaultConnection`.
 Redis integration tests are skipped unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
-Seed data lives in the `SeedDefaultEvent` migration, not in application code.
+Migrations contain no seed data: a new PostgreSQL database starts empty. Only the in-memory
+fallback (no `ConnectionStrings__DefaultConnection`) preloads a dummy event with 50 seats.
 
 ## Architecture
 
