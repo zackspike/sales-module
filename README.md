@@ -22,11 +22,13 @@ booking-service/
 ├── BookingService.Api/            # Minimal APIs, endpoints, middleware, HTTP models
 ├── BookingService.Application/    # Use cases, application orchestration, DTOs, validations
 ├── BookingService.Domain/         # Core business entities (Ticket, Event), value objects, domain rules
-├── BookingService.Infrastructure/ # EF Core + PostgreSQL persistence, migrations (incl. seed data), Redis seat locks/cache, in-memory fallback
-├── BookingService.Application.Tests/ # xUnit unit tests (+ PostgreSQL/Redis integration tests when configured)
+├── BookingService.Infrastructure/ # EF Core + PostgreSQL persistence, migrations, Redis seat locks/cache, in-memory fallback
+├── BookingService.Domain.Tests/   # xUnit unit tests for Domain
+├── BookingService.Application.Tests/ # xUnit unit tests for Application use cases
+├── BookingService.Infrastructure.Tests/ # xUnit tests for Infrastructure (PostgreSQL/Redis ones run when configured)
 ├── docker-compose.yml             # Local PostgreSQL and Redis dependencies
 ├── scripts/                       # Lifecycle & release automation scripts (bump, changelog)
-├── .agents/                       # Agent workflows, specifications (Notion), and MCP integrations
+├── .agents/                       # Agent workflows
 ├── AGENTS.md                      # Global architecture rules & agent workflow protocol
 └── BookingService.slnx            # Solution file
 ```
@@ -50,8 +52,9 @@ booking-service/
    docker compose up -d   # PostgreSQL on localhost:5433, Redis on localhost:6381 (used by appsettings.Development.json)
    dotnet run --project BookingService.Api
    ```
-   In Development the API applies pending EF Core migrations on startup. The `SeedDefaultEvent` migration
-   seeds a dummy event (`11111111-1111-1111-1111-111111111111`, "Rock Fest 2026") with 50 available seats (`A-1`..`A-50`).
+   In Development the API applies pending EF Core migrations on startup. Migrations contain no seed data, so the
+   database starts empty; only the in-memory fallback preloads a dummy event (`11111111-1111-1111-1111-111111111111`,
+   "Rock Fest 2026") with 50 available seats (`A-1`..`A-50`).
    To apply migrations manually instead: `dotnet tool restore && dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api`.
    Without `ConnectionStrings:DefaultConnection` it falls back to the in-memory store (data is lost on restart).
    Without `ConnectionStrings:Redis` seat reservations are kept in memory (not shared between instances) and nothing is cached.
@@ -73,9 +76,11 @@ booking-service/
    ```bash
    dotnet test
    ```
-   PostgreSQL integration tests are skipped unless `ConnectionStrings__DefaultConnection` is set
-   (e.g. `Host=localhost;Port=5433;Database=bookingservice_db;Username=postgres;Password=postgres`),
-   and Redis integration tests unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
+   PostgreSQL integration tests require Docker to be running: they start a disposable
+   `postgres:17-alpine` container with [Testcontainers](https://dotnet.testcontainers.org/), apply the
+   EF Core migrations to it and remove it afterwards. They never read `ConnectionStrings__DefaultConnection`
+   or any other application setting, so `dotnet test` cannot touch your development database.
+   Redis integration tests are skipped unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
 
 6. **Lint (code quality & formatting):**
    * Verify formatting (lint check):

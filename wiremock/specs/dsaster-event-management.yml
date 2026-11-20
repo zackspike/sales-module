@@ -1,0 +1,468 @@
+openapi: 3.0.3
+info:
+  title: eventManagement_api
+  description: ''
+  license:
+    name: ''
+  version: 0.1.0
+paths:
+  /api/v1/events:
+    get:
+      tags:
+      - events
+      summary: Obtiene una lista paginada de eventos con filtros opcionales (o un evento específico vía ?id=...).
+      operationId: get_events
+      parameters:
+      - name: page
+        in: query
+        description: Número de página (comienza en 1, por defecto 1)
+        required: false
+        schema:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+      - name: per_page
+        in: query
+        description: Cantidad de elementos por página (por defecto 10, máx 100)
+        required: false
+        schema:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+      - name: status
+        in: query
+        description: Filtrar por estado del evento (Draft, Scheduled, On Sale, Sold Out, Completed, Cancelled)
+        required: false
+        schema:
+          type: string
+          nullable: true
+      - name: venue_id
+        in: query
+        description: Filtrar por identificador de recinto
+        required: false
+        schema:
+          type: string
+          format: uuid
+          nullable: true
+      - name: organizer_id
+        in: query
+        description: Filtrar por identificador de organizador
+        required: false
+        schema:
+          type: string
+          format: uuid
+          nullable: true
+      - name: id
+        in: query
+        description: Filtrar por un identificador de evento específico
+        required: false
+        schema:
+          type: string
+          format: uuid
+          nullable: true
+      responses:
+        '200':
+          description: Lista paginada de eventos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEventSummaryResponse'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseDto'
+    post:
+      tags:
+      - events
+      summary: Registra y crea un nuevo evento en el sistema a nombre del organizador autenticado.
+      operationId: create_event
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventRequestDto'
+        required: true
+      responses:
+        '201':
+          description: Evento creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventConfirmationDto'
+        '400':
+          description: Datos de entrada inválidos o recinto inexistente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseDto'
+        '401':
+          description: Token ausente o inválido, o partner inexistente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseDto'
+        '403':
+          description: El partner autenticado no es organizador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseDto'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseDto'
+      security:
+      - bearer_auth: []
+  /api/v1/events/{id}:
+    get:
+      tags:
+      - events
+      summary: Obtiene los detalles completos de un evento específico por su ID.
+      operationId: get_event_by_id
+      parameters:
+      - name: id
+        in: path
+        description: Identificador único del evento en formato UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Detalle completo del evento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventResponseDto'
+        '400':
+          description: Identificador UUID inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseDto'
+        '404':
+          description: Evento no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseDto'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseDto'
+  /health:
+    get:
+      tags:
+      - crate::api::health_api
+      summary: Endpoint de Health Check
+      description: |-
+        Se utiliza para monitoreo (ej. Kubernetes, Docker Healthcheck, balanceadores de carga).
+        Devuelve un HTTP 200 OK con un JSON confirmando que el servicio está vivo.
+      operationId: health_check
+      responses:
+        '200':
+          description: The service is up and responding correctly
+          content:
+            application/json:
+              schema: {}
+              example:
+                message: Event Management API is running normally
+                status: ok
+                version: 0.1.0
+components:
+  schemas:
+    CreateEventRequestDto:
+      type: object
+      description: Request payload para la creación y registro de eventos
+      required:
+      - name
+      - artist
+      - date
+      - venue_id
+      properties:
+        age_policy:
+          type: string
+          description: Política de edad (por defecto "All ages")
+          nullable: true
+        artist:
+          type: string
+          description: Artista
+        date:
+          type: string
+          format: date-time
+          description: Fecha y hora del evento
+        description:
+          type: string
+          description: Descripción opcional del evento
+          nullable: true
+        event_type:
+          type: string
+          description: Tipo de evento (por defecto "Concert")
+          nullable: true
+        name:
+          type: string
+          description: Nombre del evento
+        terms:
+          type: string
+          description: Términos y condiciones opcionales
+          nullable: true
+        venue_id:
+          type: string
+          format: uuid
+          description: Identificador del recinto
+    ErrorResponseDto:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+    EventConfirmationDto:
+      type: object
+      description: Confirmación retornada tras la creación exitosa de un evento (HTTP 201)
+      required:
+      - id
+      - message
+      - name
+      - artist
+      - date
+      - venue_id
+      - status
+      - created_at
+      properties:
+        artist:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        date:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        message:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        venue_id:
+          type: string
+          format: uuid
+    EventMediaDto:
+      type: object
+      required:
+      - id
+      - media_type
+      - url
+      properties:
+        id:
+          type: string
+          format: uuid
+        media_type:
+          type: string
+        url:
+          type: string
+    EventPricingTierDto:
+      type: object
+      required:
+      - id
+      - name
+      - price
+      - currency
+      properties:
+        currency:
+          type: string
+        description:
+          type: string
+          nullable: true
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        price:
+          type: string
+    EventResponseDto:
+      type: object
+      description: Detalle completo de un evento con todas sus colecciones anidadas
+      required:
+      - id
+      - organizer_id
+      - venue_id
+      - name
+      - event_type
+      - age_policy
+      - status
+      - schedules
+      - pricing_tiers
+      - sales
+      - media
+      - created_at
+      - updated_at
+      properties:
+        age_policy:
+          type: string
+        artist:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        description:
+          type: string
+          nullable: true
+        event_type:
+          type: string
+        id:
+          type: string
+          format: uuid
+        media:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventMediaDto'
+        name:
+          type: string
+        organizer_id:
+          type: string
+          format: uuid
+        pricing_tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventPricingTierDto'
+        sales:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventSaleDto'
+        schedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventScheduleDto'
+        status:
+          type: string
+        terms:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+        venue_id:
+          type: string
+          format: uuid
+    EventSaleDto:
+      type: object
+      required:
+      - id
+      - starts_at
+      properties:
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+    EventScheduleDto:
+      type: object
+      required:
+      - id
+      - starts_at
+      properties:
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+    EventSummaryDto:
+      type: object
+      description: Proyección ligera y optimizada para listados paginados
+      required:
+      - id
+      - organizer_id
+      - venue_id
+      - name
+      - event_type
+      - status
+      - schedules
+      properties:
+        artist:
+          type: string
+          nullable: true
+        event_type:
+          type: string
+        id:
+          type: string
+          format: uuid
+        min_price:
+          type: string
+          nullable: true
+        name:
+          type: string
+        organizer_id:
+          type: string
+          format: uuid
+        schedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventScheduleDto'
+        status:
+          type: string
+        venue_id:
+          type: string
+          format: uuid
+    PaginatedEventSummaryResponse:
+      type: object
+      description: Contenedor genérico para respuestas paginadas
+      required:
+      - items
+      - page
+      - per_page
+      - total_items
+      - total_pages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventSummaryDto'
+        page:
+          type: integer
+          format: int64
+          minimum: 0
+        per_page:
+          type: integer
+          format: int64
+          minimum: 0
+        total_items:
+          type: integer
+          format: int64
+          minimum: 0
+        total_pages:
+          type: integer
+          format: int64
+          minimum: 0
+  securitySchemes:
+    bearer_auth:
+      type: http
+      scheme: bearer
+tags:
+- name: events
+  description: Endpoints de consulta y gestión de eventos
+- name: health
+  description: Monitoreo y disponibilidad del servicio

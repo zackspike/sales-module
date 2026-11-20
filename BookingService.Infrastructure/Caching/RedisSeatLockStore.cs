@@ -4,10 +4,10 @@ using StackExchange.Redis;
 namespace BookingService.Infrastructure.Caching;
 
 /// <summary>
-/// Seat locks as Redis strings <c>booking:seat-lock:{ticketId} = {holder}</c> with a TTL.
+/// Event seat locks stored as Redis strings <c>booking:seat-lock:{eventSeatId} = {holderIdentifier}</c> with a TTL.
 /// Acquire and release run as Lua scripts, so the check and the write are one atomic step.
 /// </summary>
-public sealed class RedisSeatLockStore : ISeatLockStore
+public sealed class RedisSeatLockStore : IEventSeatLockStore
 {
     // Returns 1 when the lock was taken, 2 when the caller already held it (TTL renewed), 0 otherwise.
     private const string AcquireScript = """
@@ -35,51 +35,68 @@ public sealed class RedisSeatLockStore : ISeatLockStore
 
     public RedisSeatLockStore(IConnectionMultiplexer redis)
     {
+        ArgumentNullException.ThrowIfNull(redis);
         _redis = redis;
     }
 
-    public SeatLockResult TryAcquire(Guid ticketId, string holder, TimeSpan duration)
+    private IDatabase Database => _redis.GetDatabase();
+
+    public async Task<EventSeatLockResult> TryAcquireAsync(
+        Guid eventSeatId,
+        string holderIdentifier,
+        TimeSpan duration,
+        CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(duration, TimeSpan.Zero);
+        ArgumentException.ThrowIfNullOrWhiteSpace(holderIdentifier);
 
-        var outcome = (int)_redis.GetDatabase().ScriptEvaluate(
+        var outcome = (int)await Database.ScriptEvaluateAsync(
             AcquireScript,
-            [RedisKeys.SeatLock(ticketId)],
-            [holder, (long)duration.TotalMilliseconds]);
+            [RedisKeys.SeatLock(eventSeatId)],
+            [holderIdentifier, (long)duration.TotalMilliseconds]);
 
         return outcome switch
         {
-            1 => SeatLockResult.Acquired,
-            2 => SeatLockResult.Renewed,
-            _ => SeatLockResult.HeldByAnother
+            1 => EventSeatLockResult.Acquired,
+            2 => EventSeatLockResult.Renewed,
+            _ => EventSeatLockResult.HeldByAnother
         };
     }
 
-    public string? GetHolder(Guid ticketId)
+    public async Task<string?> GetHolderIdentifierAsync(Guid eventSeatId, CancellationToken cancellationToken)
     {
-        var holder = _redis.GetDatabase().StringGet(RedisKeys.SeatLock(ticketId));
+        var holder = await Database.StringGetAsync(RedisKeys.SeatLock(eventSeatId));
         return holder.HasValue ? holder.ToString() : null;
     }
 
-    public IReadOnlySet<Guid> GetLockedTicketIds(IReadOnlyCollection<Guid> ticketIds)
+    public async Task<IReadOnlySet<Guid>> GetLockedEventSeatIdsAsync(
+        IReadOnlyCollection<Guid> eventSeatIds,
+        CancellationToken cancellationToken)
     {
-        if (ticketIds.Count == 0)
+        ArgumentNullException.ThrowIfNull(eventSeatIds);
+
+        if (eventSeatIds.Count == 0)
         {
             return new HashSet<Guid>();
         }
 
-        var ids = ticketIds.ToArray();
-        var holders = _redis.GetDatabase().StringGet(ids.Select(RedisKeys.SeatLock).ToArray());
+        var ids = eventSeatIds.ToArray();
+        var holders = await Database.StringGetAsync(ids.Select(RedisKeys.SeatLock).ToArray());
 
         return ids.Where((_, i) => holders[i].HasValue).ToHashSet();
     }
 
-    public bool Release(Guid ticketId, string holder)
+    public async Task<bool> ReleaseAsync(
+        Guid eventSeatId,
+        string holderIdentifier,
+        CancellationToken cancellationToken)
     {
-        var deleted = (int)_redis.GetDatabase().ScriptEvaluate(
+        ArgumentException.ThrowIfNullOrWhiteSpace(holderIdentifier);
+
+        var deleted = (int)await Database.ScriptEvaluateAsync(
             ReleaseScript,
-            [RedisKeys.SeatLock(ticketId)],
-            [holder]);
+            [RedisKeys.SeatLock(eventSeatId)],
+            [holderIdentifier]);
 
         return deleted == 1;
     }

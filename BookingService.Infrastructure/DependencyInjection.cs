@@ -15,10 +15,13 @@ public static class DependencyInjection
     /// is configured, it registers EF Core with Postgres repositories. Otherwise, it falls back
     /// to in-memory stores for isolated testing without a live database.
     /// Likewise, a Redis connection string ("Redis") enables the Redis seat locks, idempotency store
-    /// and available seats cache; without it, seat locks are kept in memory and nothing is cached.
+    /// and event seats cache; without it, seat locks are kept in memory and nothing is cached.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration? configuration = null)
     {
+        // Until VenueService is integrated, the venue seat catalog is served from the agreed test data.
+        services.AddSingleton<IVenueSeatCatalog, InMemoryVenueSeatCatalog>();
+
         var connectionString = configuration?.GetConnectionString("DefaultConnection");
 
         if (!string.IsNullOrWhiteSpace(connectionString))
@@ -27,12 +30,12 @@ public static class DependencyInjection
                 options.UseNpgsql(connectionString));
 
             services.AddScoped<IEventCatalog, PostgresEventCatalog>();
-            services.AddScoped<ITicketRepository, PostgresTicketRepository>();
+            services.AddScoped<IEventSeatRepository, PostgresEventSeatRepository>();
         }
         else
         {
             services.AddSingleton<IEventCatalog, InMemoryEventCatalog>();
-            services.AddSingleton<ITicketRepository>(_ => new InMemoryTicketRepository(seedDefaultInventory: true));
+            services.AddSingleton<IEventSeatRepository>(_ => new InMemoryEventSeatRepository(seedDefaultInventory: true));
         }
 
         var redisConnectionString = configuration?.GetConnectionString("Redis");
@@ -49,16 +52,16 @@ public static class DependencyInjection
 
                 return ConnectionMultiplexer.Connect(options);
             });
-            services.AddSingleton<ISeatLockStore, RedisSeatLockStore>();
+            services.AddSingleton<IEventSeatLockStore, RedisSeatLockStore>();
             services.AddSingleton<IIdempotencyStore, RedisIdempotencyStore>();
-            services.AddSingleton<IAvailableSeatsCache, RedisAvailableSeatsCache>();
+            services.AddSingleton<IEventSeatsCache, RedisEventSeatsCache>();
         }
         else
         {
-            services.AddSingleton<ISeatLockStore>(_ => new InMemorySeatLockStore());
+            services.AddSingleton<IEventSeatLockStore>(_ => new InMemorySeatLockStore());
             services.AddSingleton<NoCache>();
             services.AddSingleton<IIdempotencyStore>(sp => sp.GetRequiredService<NoCache>());
-            services.AddSingleton<IAvailableSeatsCache>(sp => sp.GetRequiredService<NoCache>());
+            services.AddSingleton<IEventSeatsCache>(sp => sp.GetRequiredService<NoCache>());
         }
 
         return services;

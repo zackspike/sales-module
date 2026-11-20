@@ -12,8 +12,8 @@ public class PostgresEventCatalog : IEventCatalog
         _dbContext = dbContext;
     }
 
-    public bool Exists(Guid eventId)
+    public Task<bool> ExistsAsync(Guid eventId, CancellationToken cancellationToken)
     {
-        return _dbContext.Events.Any(e => e.Id == eventId);
+        return _dbContext.Events.AnyAsync(e => e.Id == eventId, cancellationToken);
     }
 }

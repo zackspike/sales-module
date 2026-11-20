@@ -1,27 +1,41 @@
 using BookingService.Application.Abstractions;
-using BookingService.Application.Tickets.Dtos;
+using BookingService.Application.EventSeats.ReadModels;
 
 namespace BookingService.Infrastructure.Caching;
 
 /// <summary>
-/// Used when Redis is not configured: every lookup misses, so handlers fall back to the ticket
-/// repository, which already is the durable source of truth for availability and idempotency.
+/// Null Object pattern implementation used when Redis is not configured: every lookup misses,
+/// so handlers fall back to the durable repository as the source of truth for availability and idempotency.
 /// </summary>
-public sealed class NoCache : IIdempotencyStore, IAvailableSeatsCache
+public sealed class NoCache : IIdempotencyStore, IEventSeatsCache
 {
-    public IdempotencyRecord? Get(Guid idempotencyKey) => null;
+    public Task<IdempotencyRecord?> GetIdempotencyRecordAsync(
+        Guid idempotencyKey,
+        CancellationToken cancellationToken) => Task.FromResult<IdempotencyRecord?>(null);
 
-    public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention)
+    public Task RememberAsync(
+        Guid idempotencyKey,
+        IdempotencyRecord record,
+        TimeSpan retention,
+        CancellationToken cancellationToken)
     {
+        return Task.CompletedTask;
     }
 
-    IReadOnlyList<SeatAvailabilityDto>? IAvailableSeatsCache.Get(Guid eventId) => null;
+    public Task<IReadOnlyList<EventSeatAvailability>?> GetAsync(
+        Guid eventId,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<EventSeatAvailability>?>(null);
 
-    public void Set(Guid eventId, IReadOnlyList<SeatAvailabilityDto> seats)
+    public Task SetAsync(
+        Guid eventId,
+        IReadOnlyList<EventSeatAvailability> seats,
+        CancellationToken cancellationToken)
     {
+        return Task.CompletedTask;
     }
 
-    public void Invalidate(Guid eventId)
+    public Task InvalidateAsync(Guid eventId, CancellationToken cancellationToken)
     {
+        return Task.CompletedTask;
     }
 }

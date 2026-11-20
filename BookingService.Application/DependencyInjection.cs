@@ -1,5 +1,5 @@
-using BookingService.Application.Tickets.Commands;
-using BookingService.Application.Tickets.Queries;
+using BookingService.Application.EventSeats.Commands;
+using BookingService.Application.EventSeats.Queries;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BookingService.Application;
@@ -11,11 +11,12 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        services.AddScoped<TicketPurchaseValidator>();
-        services.AddScoped<ReserveSeatHandler>();
-        services.AddScoped<PurchaseTicketHandler>();
-        services.AddScoped<GetAvailableTicketsHandler>();
-        services.AddScoped<CheckTicketAvailabilityHandler>();
+        services.AddScoped<ReserveEventSeatHandler>();
+        services.AddScoped<ReleaseEventSeatHandler>();
+        services.AddScoped<PurchaseEventSeatHandler>();
+        services.AddScoped<GetEventSeatsHandler>();
+        services.AddScoped<GetEventSeatAvailabilityHandler>();
+        services.AddScoped<GetTicketByCodeHandler>();
         return services;
     }
 }

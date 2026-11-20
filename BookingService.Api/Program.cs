@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json.Serialization;
 using BookingService.Api.Endpoints;
 using BookingService.Api.Middleware;
 using BookingService.Application;
@@ -32,14 +33,36 @@ builder.Services.AddSwaggerGen(options =>
     {
         options.IncludeXmlComments(appXmlPath);
     }
+
+    options.SupportNonNullableReferenceTypes();
+    options.NonNullableReferenceTypesAsRequired();
+    options.UseAllOfToExtendReferenceSchemas();
 });
 
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// Swashbuckle builds schemas from the MVC JSON options, not the Minimal API ones above.
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// The booking_buyer cookie only crosses origins with credentials, which need explicit origins
+// (Cors:AllowedOrigins). Without them, any origin may call the API but the cookie works only same-origin.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins).AllowCredentials();
+        }
+        else
+        {
+            policy.AllowAnyOrigin();
+        }
+
+        policy.AllowAnyHeader()
               .AllowAnyMethod();
     });
 });

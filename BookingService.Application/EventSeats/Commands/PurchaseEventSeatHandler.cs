@@ -1,0 +1,207 @@
+using BookingService.Application.Abstractions;
+using BookingService.Application.EventSeats.ReadModels;
+using BookingService.Domain.EventSeats;
+using Microsoft.Extensions.Logging;
+
+namespace BookingService.Application.EventSeats.Commands;
+
+/// <summary>
+/// Buys a reserved event seat and issues its ticket (SP-05 / SP-06 / APP-04): validates name and email
+/// (400), checks the event exists (404), answers duplicated requests from the idempotency store or the repository,
+/// requires the buyer (email and buyer token) to hold the seat lock taken by <see cref="ReserveEventSeatHandler"/> (403), and then
+/// sells the seat atomically and idempotently through <see cref="IEventSeatRepository.SellOnceAsync"/>.
+/// The "a seat is sold only once" rule lives in <see cref="EventSeat.Sell"/>.
+/// </summary>
+public sealed class PurchaseEventSeatHandler
+{
+    /// <summary>
+    /// How long a used idempotency key is answered from the idempotency store.
+    /// </summary>
+    public static readonly TimeSpan IdempotencyKeyRetention = TimeSpan.FromMinutes(10);
+
+    private readonly IEventCatalog _eventCatalog;
+    private readonly IEventSeatRepository _eventSeatRepository;
+    private readonly IVenueSeatCatalog _venueSeatCatalog;
+    private readonly IEventSeatLockStore _eventSeatLocks;
+    private readonly IIdempotencyStore _idempotency;
+    private readonly IEventSeatsCache _eventSeatsCache;
+    private readonly ILogger<PurchaseEventSeatHandler> _logger;
+
+    public PurchaseEventSeatHandler(
+        IEventCatalog eventCatalog,
+        IEventSeatRepository eventSeatRepository,
+        IVenueSeatCatalog venueSeatCatalog,
+        IEventSeatLockStore eventSeatLocks,
+        IIdempotencyStore idempotency,
+        IEventSeatsCache eventSeatsCache,
+        ILogger<PurchaseEventSeatHandler> logger)
+    {
+        _eventCatalog = eventCatalog;
+        _eventSeatRepository = eventSeatRepository;
+        _venueSeatCatalog = venueSeatCatalog;
+        _eventSeatLocks = eventSeatLocks;
+        _idempotency = idempotency;
+        _eventSeatsCache = eventSeatsCache;
+        _logger = logger;
+    }
+
+    public async Task<PurchaseEventSeatResult> HandleAsync(
+        PurchaseEventSeatCommand command,
+        CancellationToken cancellationToken)
+    {
+        var errors = TicketHolderValidator.Validate(command.FullName, command.Email);
+        if (errors.Count > 0)
+        {
+            return PurchaseEventSeatResult.Invalid(errors);
+        }
+
+        if (command.IdempotencyKey == Guid.Empty)
+        {
+            return PurchaseEventSeatResult.Invalid(new Dictionary<string, string[]>
+            {
+                ["idempotencyKey"] = ["idempotencyKey must be a non-empty UUID."]
+            });
+        }
+
+        if (!await _eventCatalog.ExistsAsync(command.EventId, cancellationToken))
+        {
+            return PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.EventNotFound);
+        }
+
+        var fullName = command.FullName.Trim();
+        var email = command.Email.Trim();
+
+        if (await _idempotency.GetIdempotencyRecordAsync(command.IdempotencyKey, cancellationToken) is { } remembered)
+        {
+            return await ReplayRememberedPurchaseAsync(remembered, command, cancellationToken);
+        }
+
+        var eventSeat = await _eventSeatRepository.GetByIdAsync(command.EventId, command.EventSeatId, cancellationToken);
+        if (eventSeat is null)
+        {
+            return PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.EventSeatNotFound);
+        }
+
+        // Resolved before selling, so a seat with broken venue data is never sold.
+        var seatNumber = await SeatNumberOfAsync(eventSeat, cancellationToken);
+
+        if (eventSeat.Status == EventSeatStatus.Sold)
+        {
+            return await SoldSeatResultAsync(command, seatNumber, cancellationToken);
+        }
+
+        var holder = EventSeatLockHolder.From(email, command.BuyerToken);
+        if (await _eventSeatLocks.GetHolderIdentifierAsync(eventSeat.Id, cancellationToken) != holder)
+        {
+            // A concurrent purchase may have sold the seat and released its lock after the check
+            // above; the sale is committed before the release, so a re-read sees it.
+            var current = await _eventSeatRepository.GetByIdAsync(command.EventId, command.EventSeatId, cancellationToken);
+            return current?.Status == EventSeatStatus.Sold
+                ? await SoldSeatResultAsync(command, seatNumber, cancellationToken)
+                : PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.ReservationRequired);
+        }
+
+        EventSeatSaleOutcome outcome;
+        try
+        {
+            outcome = await _eventSeatRepository.SellOnceAsync(
+                command.IdempotencyKey,
+                command.EventId,
+                command.EventSeatId,
+                seat => seat.Sell(fullName, email, DateTime.UtcNow),
+                cancellationToken);
+        }
+        catch (EventSeatAlreadySoldException)
+        {
+            return PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.AlreadySold);
+        }
+
+        if (outcome.Sale is null)
+        {
+            return PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.EventSeatNotFound);
+        }
+
+        if (!outcome.Replayed)
+        {
+            await AfterPurchaseCommittedAsync(outcome.Sale, command, holder);
+            return PurchaseEventSeatResult.Purchased(IssuedTicket.From(outcome.Sale, seatNumber));
+        }
+
+        return outcome.Sale.Seat.Id == command.EventSeatId && outcome.Sale.Seat.EventId == command.EventId
+            ? PurchaseEventSeatResult.Replayed(IssuedTicket.From(outcome.Sale, seatNumber))
+            : PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.IdempotencyKeyConflict);
+    }
+
+    // Also covers retries whose idempotency store entry expired: the repository keeps the key of every sale.
+    private async Task<PurchaseEventSeatResult> SoldSeatResultAsync(
+        PurchaseEventSeatCommand command,
+        string seatNumber,
+        CancellationToken cancellationToken) =>
+        await _eventSeatRepository.GetSaleByIdempotencyKeyAsync(
+            command.IdempotencyKey,
+            command.EventId,
+            command.EventSeatId,
+            cancellationToken) is { } sale
+            ? PurchaseEventSeatResult.Replayed(IssuedTicket.From(sale, seatNumber))
+            : PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.AlreadySold);
+
+    private async Task<PurchaseEventSeatResult> ReplayRememberedPurchaseAsync(
+        IdempotencyRecord remembered,
+        PurchaseEventSeatCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (remembered.EventSeatId != command.EventSeatId || remembered.EventId != command.EventId)
+        {
+            return PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.IdempotencyKeyConflict);
+        }
+
+        var sale = await _eventSeatRepository.GetSaleByIdempotencyKeyAsync(
+            command.IdempotencyKey,
+            command.EventId,
+            command.EventSeatId,
+            cancellationToken);
+        return sale is null
+            ? PurchaseEventSeatResult.Failed(PurchaseEventSeatStatus.EventSeatNotFound)
+            : PurchaseEventSeatResult.Replayed(IssuedTicket.From(sale, await SeatNumberOfAsync(sale.Seat, cancellationToken)));
+    }
+
+    /// <summary>
+    /// Updates the hot-path stores once the sale is durable. Each update is attempted independently and its
+    /// failure is only logged: the sale is already committed, the lock and cache expire on their own, and replays
+    /// fall back to the repository.
+    /// Runs with <see cref="CancellationToken.None"/>, so a request cancelled after the commit still updates them.
+    /// </summary>
+    private async Task AfterPurchaseCommittedAsync(EventSeatSale sale, PurchaseEventSeatCommand command, string holder)
+    {
+        await BestEffortAsync("idempotency", sale.Seat.Id, () => _idempotency.RememberAsync(
+            command.IdempotencyKey,
+            new IdempotencyRecord(command.EventId, sale.Seat.Id),
+            IdempotencyKeyRetention,
+            CancellationToken.None));
+        await BestEffortAsync("seat lock", sale.Seat.Id, () =>
+            _eventSeatLocks.ReleaseAsync(sale.Seat.Id, holder, CancellationToken.None));
+        await BestEffortAsync("event seats cache", sale.Seat.Id, () =>
+            _eventSeatsCache.InvalidateAsync(command.EventId, CancellationToken.None));
+    }
+
+    private async Task BestEffortAsync(string store, Guid eventSeatId, Func<Task> update)
+    {
+        try
+        {
+            await update();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Event seat {EventSeatId} was sold but the {Store} store could not be updated.",
+                eventSeatId,
+                store);
+        }
+    }
+
+    private async Task<string> SeatNumberOfAsync(EventSeat eventSeat, CancellationToken cancellationToken) =>
+        (await _venueSeatCatalog.GetByIdAsync(eventSeat.VenueSeatId, cancellationToken))?.SeatNumber
+            ?? throw new InvalidOperationException(
+                $"Event seat {eventSeat.Id} references venue seat {eventSeat.VenueSeatId}, which is not in the catalog.");
+}
