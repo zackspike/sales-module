@@ -3,6 +3,7 @@ namespace BookingService.Domain.EventSeats;
 /// <summary>
 /// Rules of the temporary seat reservation taken when a fan clicks "comprar".
 /// </summary>
+[Obsolete("Held seats expire with the purchase session (Purchase.ExpiresAtUtc), whose duration is configurable. Remove when Application moves to Purchase.")]
 public static class EventSeatReservationPolicy
 {
     /// <summary>
