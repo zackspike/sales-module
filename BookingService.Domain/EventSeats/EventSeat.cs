@@ -1,3 +1,4 @@
+using BookingService.Domain.Purchases;
 using BookingService.Domain.Tickets;
 
 namespace BookingService.Domain.EventSeats;
@@ -35,10 +36,20 @@ public class EventSeat
     }
 
     /// <summary>
+    /// Sells this seat to the buyer of the purchase, whose name and email go on the ticket.
+    /// A seat can only be sold once.
+    /// </summary>
+    /// <exception cref="EventSeatAlreadySoldException"></exception>
+    public Ticket Sell(Purchase purchase, DateTime soldAtUtc) => SellTo(purchase.Name, purchase.Email, soldAtUtc);
+
+    /// <summary>
     /// Sells this seat to the given customer. A seat can only be sold once.
     /// </summary>
     /// <exception cref="EventSeatAlreadySoldException"></exception>
-    public Ticket Sell(string holderName, string holderEmail, DateTime soldAtUtc)
+    [Obsolete("Name and email come from the purchase: use Sell(Purchase, DateTime). Remove when Application moves to Purchase.")]
+    public Ticket Sell(string holderName, string holderEmail, DateTime soldAtUtc) => SellTo(holderName, holderEmail, soldAtUtc);
+
+    private Ticket SellTo(string holderName, string holderEmail, DateTime soldAtUtc)
     {
         if (Status == EventSeatStatus.Sold)
         {
