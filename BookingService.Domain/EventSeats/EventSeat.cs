@@ -37,10 +37,19 @@ public class EventSeat
 
     /// <summary>
     /// Sells this seat to the buyer of the purchase, whose name and email go on the ticket.
-    /// A seat can only be sold once.
+    /// A seat can only be sold once, and only to a purchase that holds it.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The purchase does not hold this seat.</exception>
     /// <exception cref="EventSeatAlreadySoldException"></exception>
-    public Ticket Sell(Purchase purchase, DateTime soldAtUtc) => SellTo(purchase.Name, purchase.Email, soldAtUtc);
+    public Ticket Sell(Purchase purchase, DateTime soldAtUtc)
+    {
+        if (!purchase.HeldEventSeatIds.Contains(Id))
+        {
+            throw new InvalidOperationException($"Purchase {purchase.Id} does not hold event seat {Id}.");
+        }
+
+        return SellTo(purchase.Name, purchase.Email, soldAtUtc);
+    }
 
     /// <summary>
     /// Sells this seat to the given customer. A seat can only be sold once.

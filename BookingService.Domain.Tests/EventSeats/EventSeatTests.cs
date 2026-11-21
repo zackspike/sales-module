@@ -10,8 +10,12 @@ public class EventSeatTests
     private static readonly Guid ZoneId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly DateTime SoldAt = new(2026, 9, 26, 18, 30, 0, DateTimeKind.Utc);
 
-    private static Purchase PurchaseBy(string name, string email) =>
-        Purchase.Start(name, email, SoldAt, TimeSpan.FromMinutes(10));
+    private static Purchase PurchaseHolding(EventSeat seat, string name = "Juan Perez", string email = "juan.perez@example.com")
+    {
+        var purchase = Purchase.Start(name, email, SoldAt, TimeSpan.FromMinutes(10));
+        purchase.Hold(seat.EventId, [seat.Id], maxSeats: 3, SoldAt);
+        return purchase;
+    }
 
     [Fact]
     public void CreateAvailable_builds_an_available_seat()
@@ -30,7 +34,7 @@ public class EventSeatTests
     {
         var seat = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
 
-        var ticket = seat.Sell(PurchaseBy("Juan Perez", "juan.perez@example.com"), SoldAt);
+        var ticket = seat.Sell(PurchaseHolding(seat), SoldAt);
 
         Assert.Equal(EventSeatStatus.Sold, seat.Status);
         Assert.NotEqual(Guid.Empty, ticket.Id);
@@ -43,8 +47,9 @@ public class EventSeatTests
     [Fact]
     public void Sold_ticket_has_a_valid_ticket_code()
     {
-        var ticket = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId)
-            .Sell(PurchaseBy("Juan Perez", "juan.perez@example.com"), SoldAt);
+        var seat = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
+
+        var ticket = seat.Sell(PurchaseHolding(seat), SoldAt);
 
         Assert.StartsWith("TK-", ticket.TicketCode);
         Assert.True(Guid.TryParseExact(ticket.TicketCode[3..], "N", out _));
@@ -54,13 +59,24 @@ public class EventSeatTests
     public void Sold_seat_cannot_be_sold_again()
     {
         var seat = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
-        seat.Sell(PurchaseBy("Juan Perez", "juan.perez@example.com"), SoldAt);
+        seat.Sell(PurchaseHolding(seat), SoldAt);
 
         var exception = Assert.Throws<EventSeatAlreadySoldException>(() =>
-            seat.Sell(PurchaseBy("Ana Lopez", "ana@example.com"), SoldAt));
+            seat.Sell(PurchaseHolding(seat, "Ana Lopez", "ana@example.com"), SoldAt));
 
         Assert.Equal("EVENT_SEAT_ALREADY_SOLD", exception.Code);
         Assert.Equal(seat.Id, exception.EventSeatId);
         Assert.Equal(EventSeatStatus.Sold, seat.Status);
+    }
+
+    [Fact]
+    public void Seat_cannot_be_sold_to_a_purchase_that_does_not_hold_it()
+    {
+        var seat = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
+        var otherSeat = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
+
+        Assert.Throws<InvalidOperationException>(() => seat.Sell(PurchaseHolding(otherSeat), SoldAt));
+
+        Assert.Equal(EventSeatStatus.Available, seat.Status);
     }
 }
