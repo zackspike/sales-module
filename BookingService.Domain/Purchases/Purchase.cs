@@ -88,13 +88,19 @@ public sealed class Purchase
     }
 
     /// <summary>
-    /// Stops holding the seat. Does nothing if the purchase does not hold it.
+    /// Stops holding the seat. Does nothing if the purchase does not hold it. Releasing the last seat
+    /// frees the purchase from its event, so it can hold seats of another one.
     /// </summary>
     public void Release(Guid eventSeatId)
     {
         if (_heldEventSeatIds.Remove(eventSeatId))
         {
             PaymentToken = null;
+
+            if (_heldEventSeatIds.Count == 0)
+            {
+                EventId = null;
+            }
         }
     }
 

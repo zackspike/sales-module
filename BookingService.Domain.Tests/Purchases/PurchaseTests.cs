@@ -94,6 +94,25 @@ public class PurchaseTests
     }
 
     [Fact]
+    public void Releasing_every_seat_allows_holding_seats_of_another_event()
+    {
+        var purchase = Start();
+        var held = Seats(2);
+        purchase.Hold(EventId, held, MaxSeats, Now);
+
+        purchase.Release(held[0]);
+        Assert.Equal(EventId, purchase.EventId);
+        purchase.Release(held[1]);
+        Assert.Null(purchase.EventId);
+
+        var seats = Seats(1);
+        purchase.Hold(OtherEventId, seats, MaxSeats, Now);
+
+        Assert.Equal(OtherEventId, purchase.EventId);
+        Assert.Equal(seats, purchase.HeldEventSeatIds);
+    }
+
+    [Fact]
     public void Partial_hold_keeps_the_seats_that_did_not_conflict()
     {
         var purchase = Start();
