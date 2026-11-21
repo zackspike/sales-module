@@ -27,13 +27,15 @@ public static class DependencyInjection
 
         // StartPurchaseHandler, HoldSeatHandler and ReleaseHeldSeatHandler depend on
         // IPurchaseSessionStore, which nothing implements yet: T4 registers them along with the store.
+        // StartPaymentHandler and ConfirmPurchaseHandler also depend on IPaymentGateway,
+        // IPurchaseSaleRepository, ITicketSoldOutbox and PaymentOptions: T5/T6 register them along with those.
         // No endpoint resolves them in the meantime, and registering them now breaks app.Build() in
         // Development, where ValidateOnBuild is on.
 #pragma warning disable CS0618 // The MVP-02 handlers stay registered until the Api migrates to the purchase session.
         services.AddScoped<ReserveEventSeatHandler>();
         services.AddScoped<ReleaseEventSeatHandler>();
-#pragma warning restore CS0618
         services.AddScoped<PurchaseEventSeatHandler>();
+#pragma warning restore CS0618
         services.AddScoped<GetEventSeatsHandler>();
         services.AddScoped<GetEventSeatAvailabilityHandler>();
         services.AddScoped<GetTicketByCodeHandler>();

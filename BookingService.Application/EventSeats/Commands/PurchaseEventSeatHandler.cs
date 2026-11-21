@@ -12,6 +12,7 @@ namespace BookingService.Application.EventSeats.Commands;
 /// sells the seat atomically and idempotently through <see cref="IEventSeatRepository.SellOnceAsync"/>.
 /// The "a seat is sold only once" rule lives in <see cref="EventSeat.Sell"/>.
 /// </summary>
+[Obsolete("Replaced by ConfirmPurchaseHandler: the purchase pays every held seat and captures the payment. Remove when the Api migrates to the purchase session.")]
 public sealed class PurchaseEventSeatHandler
 {
     /// <summary>
