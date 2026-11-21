@@ -9,6 +9,7 @@ namespace BookingService.Application.EventSeats.Commands;
 /// removes the seat lock only if this buyer (email and buyer token) holds it (409 otherwise). Releasing a seat that is not reserved
 /// succeeds, so retries and expired reservations need no special handling.
 /// </summary>
+[Obsolete("Replaced by ReleaseHeldSeatHandler: the seat lock holds the purchaseId and the email lives in the purchase session. Remove when the Api migrates to the purchase session.")]
 public sealed class ReleaseEventSeatHandler
 {
     private readonly IEventCatalog _eventCatalog;
