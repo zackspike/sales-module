@@ -219,7 +219,9 @@ public class HoldSeatHandlerTests
     {
         var session = Session();
         var seat = Seat();
-        seat.Sell(session, DateTime.UtcNow);
+        var buyer = Session();
+        buyer.Hold(EventId, [seat.Id], 1, DateTime.UtcNow);
+        seat.Sell(buyer, DateTime.UtcNow);
         var locks = new FakeEventSeatLockStore();
 
         var result = await Handler(new FakePurchaseSessionStore(session), new FakeEventSeatRepository(seat), locks)

@@ -67,7 +67,7 @@ public class ReleaseHeldSeatHandlerTests
     {
         var seat = Seat();
         var session = Session();
-        seat.Sell(session, DateTime.UtcNow);
+        seat.Sell(Session(seat.Id), DateTime.UtcNow);
 
         var result = await Handler(new FakePurchaseSessionStore(session), new FakeEventSeatRepository(seat), new FakeEventSeatLockStore())
             .HandleAsync(Command(session, seat.Id), CancellationToken.None);
