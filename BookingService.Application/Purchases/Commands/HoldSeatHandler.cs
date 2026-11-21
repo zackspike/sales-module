@@ -70,15 +70,6 @@ public sealed class HoldSeatHandler
             return HoldSeatResult.Failed(HoldSeatStatus.AlreadySold);
         }
 
-        // A purchase belongs to a single event: the payment token covers one event's seats.
-        if (purchase.EventId is { } heldEventId && heldEventId != command.EventId)
-        {
-            return HoldSeatResult.Invalid(new Dictionary<string, string[]>
-            {
-                ["eventId"] = ["The purchase already holds seats of another event."]
-            });
-        }
-
         // Resolved before locking, so a seat with broken venue data is never left held.
         var seatNumber = await SeatNumberOfAsync(eventSeat, cancellationToken);
 
@@ -90,6 +81,16 @@ public sealed class HoldSeatHandler
         catch (SeatLimitReachedException)
         {
             return HoldSeatResult.Failed(HoldSeatStatus.SeatLimitReached);
+        }
+        // A purchase belongs to a single event: the payment token covers one event's seats. The rule
+        // lives in Purchase.Hold; the filter keeps a misconfigured MaxSeats (ArgumentOutOfRangeException)
+        // a 500.
+        catch (ArgumentException ex) when (ex.ParamName == "eventId")
+        {
+            return HoldSeatResult.Invalid(new Dictionary<string, string[]>
+            {
+                ["eventId"] = ["The purchase already holds seats of another event."]
+            });
         }
 
         var holder = PurchaseSeatLockHolder.Of(purchase.Id);

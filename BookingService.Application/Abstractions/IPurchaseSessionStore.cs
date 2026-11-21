@@ -13,6 +13,14 @@ public interface IPurchaseSessionStore
     /// Stores <paramref name="purchase"/> until <see cref="Purchase.ExpiresAtUtc"/>. The expiration is
     /// taken from the purchase itself, so the stored session and its deadline can never disagree;
     /// saving an already expired purchase stores nothing. Saving again never extends the deadline (ADR-001).
+    /// <para>
+    /// The implementation must be safe against concurrent writes to the same session (a stored version,
+    /// <c>WATCH</c> or a Lua script): two holds of one purchase in flight at the same time each read the
+    /// session, add their own seat and save, so a last-write-wins store loses one of the seats. That seat
+    /// stays locked in Redis under this purchase id but outside <see cref="Purchase.HeldEventSeatIds"/>,
+    /// where nobody can buy or take it until the session expires, and the same gap lets a purchase go
+    /// past its seat limit.
+    /// </para>
     /// </summary>
     Task SaveAsync(Purchase purchase, CancellationToken cancellationToken);
 

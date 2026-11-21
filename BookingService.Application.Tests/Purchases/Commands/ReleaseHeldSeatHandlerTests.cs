@@ -44,19 +44,22 @@ public class ReleaseHeldSeatHandlerTests
     }
 
     [Fact]
-    public async Task Seat_held_by_another_purchase_is_not_released()
+    public async Task Seat_held_by_another_purchase_is_not_released_and_leaves_the_session()
     {
         var seat = Seat();
-        var session = Session();
+        var session = Session(seat.Id);
+        var sessions = new FakePurchaseSessionStore(session);
         var otherHolder = Guid.NewGuid().ToString();
         var locks = new FakeEventSeatLockStore();
         locks.TryAcquire(seat.Id, otherHolder, SessionDuration);
 
-        var result = await Handler(new FakePurchaseSessionStore(session), new FakeEventSeatRepository(seat), locks)
+        var result = await Handler(sessions, new FakeEventSeatRepository(seat), locks)
             .HandleAsync(Command(session, seat.Id), CancellationToken.None);
 
         Assert.Equal(ReleaseHeldSeatStatus.HeldByAnotherPurchase, result.Status);
         Assert.Equal(otherHolder, locks.GetHolderIdentifier(seat.Id));
+        Assert.Empty(session.HeldEventSeatIds);
+        Assert.Equal(1, sessions.SaveCalls);
     }
 
     [Fact]

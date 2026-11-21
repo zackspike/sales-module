@@ -66,6 +66,10 @@ public sealed class ReleaseHeldSeatHandler
         var currentHolder = await _eventSeatLocks.GetHolderIdentifierAsync(eventSeat.Id, cancellationToken);
         if (currentHolder is not null && currentHolder != holder)
         {
+            // Symmetric with HoldSeat: the seat does not stay in the session when the lock is not ours,
+            // where it would count against the seat limit and the purchase would try to charge it.
+            purchase.Release(eventSeat.Id);
+            await _sessions.SaveAsync(purchase, cancellationToken);
             return ReleaseHeldSeatResult.Of(ReleaseHeldSeatStatus.HeldByAnotherPurchase);
         }
 
