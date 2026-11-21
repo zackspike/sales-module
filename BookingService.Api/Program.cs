@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using BookingService.Api.Endpoints;
 using BookingService.Api.Middleware;
 using BookingService.Application;
+using BookingService.Application.Purchases;
 using BookingService.Infrastructure;
 using BookingService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -68,7 +69,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services
-    .AddApplication()
+    .AddApplication(builder.Configuration.GetSection("Purchase").Get<PurchaseSessionOptions>())
     .AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
