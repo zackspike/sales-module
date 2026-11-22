@@ -1,0 +1,14 @@
+{
+  "name": "GET /health",
+  "request": {
+    "method": "GET",
+    "urlPath": "/health"
+  },
+  "response": {
+    "status": 200,
+    "bodyFileName": "event-management-api/health-check-success.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

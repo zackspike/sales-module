@@ -1,0 +1,14 @@
+{
+  "name": "POST /api/v1/events",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/events"
+  },
+  "response": {
+    "status": 201,
+    "bodyFileName": "event-management-api/create-event-success.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

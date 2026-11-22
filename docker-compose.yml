@@ -22,6 +22,15 @@ services:
     volumes:
       - redis_data:/data
 
+  wiremock:
+    image: "wiremock/wiremock:latest"
+    container_name: wiremock
+    ports:
+      - 3001:8080
+    volumes:
+      - ./wiremock:/home/wiremock
+    entrypoint: ["/docker-entrypoint.sh", "--global-response-templating", "--disable-gzip", "--verbose"]
+
 volumes:
   postgres_data:
   redis_data:

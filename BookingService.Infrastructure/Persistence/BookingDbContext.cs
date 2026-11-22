@@ -1,4 +1,5 @@
 using BookingService.Domain.Events;
+using BookingService.Domain.EventSeats;
 using BookingService.Domain.Tickets;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,7 @@ public class BookingDbContext : DbContext
     }
 
     public DbSet<Event> Events => Set<Event>();
+    public DbSet<EventSeat> EventSeats => Set<EventSeat>();
     public DbSet<Ticket> Tickets => Set<Ticket>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

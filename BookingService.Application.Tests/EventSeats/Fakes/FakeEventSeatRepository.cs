@@ -1,0 +1,127 @@
+using BookingService.Application.Abstractions;
+using BookingService.Domain.EventSeats;
+using BookingService.Domain.Tickets;
+
+namespace BookingService.Application.Tests.EventSeats.Fakes;
+
+public sealed class FakeEventSeatRepository(params EventSeat[] initialSeats) : IEventSeatRepository
+{
+    private readonly object _sync = new();
+    private readonly List<EventSeat> _seats = initialSeats.ToList();
+    private readonly Dictionary<Guid, EventSeatSale> _salesByKey = [];
+
+    public int GetByEventCalls { get; private set; }
+
+    public int GetByIdCalls { get; private set; }
+
+    public List<Guid> RequestedIds { get; } = [];
+
+    public Action<EventSeat?>? AfterSecondRead { get; set; }
+
+    public bool ReturnNullAfterSecondRead { get; init; }
+
+    public bool ThrowAlreadySold { get; init; }
+
+    public bool RemoveSeatBeforeSellOnce { get; init; }
+
+    public IReadOnlyCollection<EventSeat> Seats => _seats;
+
+    public Task<IReadOnlyCollection<EventSeat>> GetByEventAsync(Guid eventId, CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            GetByEventCalls++;
+            return Task.FromResult<IReadOnlyCollection<EventSeat>>(
+                _seats.Where(seat => seat.EventId == eventId).ToArray());
+        }
+    }
+
+    public Task<EventSeat?> GetByIdAsync(Guid eventId, Guid eventSeatId, CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            GetByIdCalls++;
+            RequestedIds.Add(eventSeatId);
+            var seat = _seats.FirstOrDefault(candidate =>
+                candidate.EventId == eventId && candidate.Id == eventSeatId);
+            if (GetByIdCalls == 2)
+            {
+                AfterSecondRead?.Invoke(seat);
+            }
+
+            return Task.FromResult(ReturnNullAfterSecondRead && GetByIdCalls == 2 ? null : seat);
+        }
+    }
+
+    public Task<EventSeatSale?> GetSaleByIdempotencyKeyAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            return Task.FromResult(_salesByKey.GetValueOrDefault(idempotencyKey) is { } sale
+                && sale.Seat.EventId == eventId
+                && sale.Seat.Id == eventSeatId
+                ? sale
+                : null);
+        }
+    }
+
+    public Task<EventSeatSale?> GetSaleByTicketCodeAsync(string ticketCode, CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            return Task.FromResult(_salesByKey.Values.FirstOrDefault(sale => sale.Ticket.TicketCode == ticketCode));
+        }
+    }
+
+    public Task<EventSeatSaleOutcome> SellOnceAsync(
+        Guid idempotencyKey,
+        Guid eventId,
+        Guid eventSeatId,
+        Func<EventSeat, Ticket> sell,
+        CancellationToken cancellationToken)
+    {
+        lock (_sync)
+        {
+            if (_salesByKey.TryGetValue(idempotencyKey, out var replay))
+            {
+                return Task.FromResult(new EventSeatSaleOutcome(replay, true));
+            }
+
+            if (RemoveSeatBeforeSellOnce)
+            {
+                _seats.RemoveAll(candidate =>
+                    candidate.EventId == eventId && candidate.Id == eventSeatId);
+            }
+
+            var seat = _seats.FirstOrDefault(candidate =>
+                candidate.EventId == eventId && candidate.Id == eventSeatId);
+            if (seat is null)
+            {
+                return Task.FromResult(new EventSeatSaleOutcome(null, false));
+            }
+
+            if (ThrowAlreadySold)
+            {
+                throw new EventSeatAlreadySoldException(seat.Id);
+            }
+
+            var sale = new EventSeatSale(seat, sell(seat));
+            _salesByKey[idempotencyKey] = sale;
+            return Task.FromResult(new EventSeatSaleOutcome(sale, false));
+        }
+    }
+
+    public EventSeatSale RememberSale(Guid idempotencyKey, EventSeat seat)
+    {
+        lock (_sync)
+        {
+            return _salesByKey[idempotencyKey] = new EventSeatSale(
+                seat,
+                seat.Sell("original", "original@example.com", DateTime.UtcNow));
+        }
+    }
+}

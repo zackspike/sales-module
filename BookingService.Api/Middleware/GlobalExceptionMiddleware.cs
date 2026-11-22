@@ -50,7 +50,6 @@ public sealed class GlobalExceptionMiddleware
             BadHttpRequestException => (HttpStatusCode.BadRequest, exception.Message),
             KeyNotFoundException => (HttpStatusCode.NotFound, "The requested resource was not found."),
             ArgumentException => (HttpStatusCode.BadRequest, exception.Message),
-            InvalidOperationException => (HttpStatusCode.BadRequest, exception.Message),
             _ => (HttpStatusCode.InternalServerError, "An unexpected internal server error occurred.")
         };
 

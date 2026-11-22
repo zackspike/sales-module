@@ -5,7 +5,7 @@ using StackExchange.Redis;
 namespace BookingService.Infrastructure.Caching;
 
 /// <summary>
-/// Used idempotency keys as Redis strings <c>booking:idempotency:{key} = {"EventId","TicketId"}</c> with a TTL.
+/// Used idempotency keys stored as Redis strings <c>booking:idempotency:{key} = {"EventId","EventSeatId"}</c> with a TTL.
 /// </summary>
 public sealed class RedisIdempotencyStore : IIdempotencyStore
 {
@@ -13,20 +13,45 @@ public sealed class RedisIdempotencyStore : IIdempotencyStore
 
     public RedisIdempotencyStore(IConnectionMultiplexer redis)
     {
+        ArgumentNullException.ThrowIfNull(redis);
         _redis = redis;
     }
 
-    public IdempotencyRecord? Get(Guid idempotencyKey)
+    private IDatabase Database => _redis.GetDatabase();
+
+    public async Task<IdempotencyRecord?> GetIdempotencyRecordAsync(
+        Guid idempotencyKey,
+        CancellationToken cancellationToken)
     {
-        var value = _redis.GetDatabase().StringGet(RedisKeys.Idempotency(idempotencyKey));
-        return value.HasValue ? JsonSerializer.Deserialize<IdempotencyRecord>(value.ToString()) : null;
+        var value = await Database.StringGetAsync(RedisKeys.Idempotency(idempotencyKey));
+        if (value.IsNullOrEmpty)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<IdempotencyRecord>((byte[])value!);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
-    public void Remember(Guid idempotencyKey, IdempotencyRecord record, TimeSpan retention)
+    public async Task RememberAsync(
+        Guid idempotencyKey,
+        IdempotencyRecord record,
+        TimeSpan retention,
+        CancellationToken cancellationToken)
     {
-        _redis.GetDatabase().StringSet(
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retention, TimeSpan.Zero);
+
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(record);
+        await Database.StringSetAsync(
             RedisKeys.Idempotency(idempotencyKey),
-            JsonSerializer.Serialize(record),
+            bytes,
             retention);
     }
 }
