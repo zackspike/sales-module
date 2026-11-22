@@ -235,7 +235,9 @@ public class ConfirmPurchaseHandlerTests
     {
         var held = Seat();
         var sold = Seat();
-        sold.Sell(Purchase.Start("Ana Lopez", "ana@example.com", DateTime.UtcNow, SessionDuration), DateTime.UtcNow);
+        var otherBuyer = Purchase.Start("Ana Lopez", "ana@example.com", DateTime.UtcNow, SessionDuration);
+        otherBuyer.Hold(sold.EventId, [sold.Id], 1, DateTime.UtcNow);
+        sold.Sell(otherBuyer, DateTime.UtcNow);
         var context = new Context([held, sold]);
         var session = context.SessionHolding(held, sold);
 
