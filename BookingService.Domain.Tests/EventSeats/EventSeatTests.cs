@@ -79,4 +79,16 @@ public class EventSeatTests
 
         Assert.Equal(EventSeatStatus.Available, seat.Status);
     }
+
+    [Fact]
+    public void Seat_cannot_be_sold_to_an_expired_purchase()
+    {
+        var seat = EventSeat.CreateAvailable(EventId, VenueSeatId, ZoneId);
+        var purchase = PurchaseHolding(seat);
+
+        var exception = Assert.Throws<PurchaseExpiredException>(() => seat.Sell(purchase, purchase.ExpiresAtUtc));
+
+        Assert.Equal(purchase.Id, exception.PurchaseId);
+        Assert.Equal(EventSeatStatus.Available, seat.Status);
+    }
 }

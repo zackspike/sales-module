@@ -1,4 +1,5 @@
 using BookingService.Domain.Purchases;
+using BookingService.Domain.Tickets;
 
 namespace BookingService.Domain.Tests.Purchases;
 
@@ -26,6 +27,34 @@ public class PurchaseTests
         Assert.Null(purchase.EventId);
         Assert.Empty(purchase.HeldEventSeatIds);
         Assert.Null(purchase.PaymentToken);
+    }
+
+    [Fact]
+    public void Start_accepts_name_and_email_at_the_ticket_limits()
+    {
+        var name = new string('a', Ticket.MaxHolderFullNameLength);
+        var email = new string('a', Ticket.MaxHolderEmailLength - "@example.com".Length) + "@example.com";
+
+        var purchase = Purchase.Start(name, email, Now, SessionDuration);
+
+        Assert.Equal(name, purchase.Name);
+        Assert.Equal(email, purchase.Email);
+    }
+
+    [Fact]
+    public void Start_rejects_a_name_longer_than_the_ticket_allows()
+    {
+        var name = new string('a', Ticket.MaxHolderFullNameLength + 1);
+
+        Assert.Throws<ArgumentException>(() => Purchase.Start(name, "juan.perez@example.com", Now, SessionDuration));
+    }
+
+    [Fact]
+    public void Start_rejects_an_email_longer_than_the_ticket_allows()
+    {
+        var email = new string('a', Ticket.MaxHolderEmailLength - "@example.com".Length + 1) + "@example.com";
+
+        Assert.Throws<ArgumentException>(() => Purchase.Start("Juan Perez", email, Now, SessionDuration));
     }
 
     [Fact]

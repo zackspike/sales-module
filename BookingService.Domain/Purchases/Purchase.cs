@@ -1,3 +1,5 @@
+using BookingService.Domain.Tickets;
+
 namespace BookingService.Domain.Purchases;
 
 /// <summary>
@@ -35,6 +37,17 @@ public sealed class Purchase
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(sessionDuration, TimeSpan.Zero);
+
+        // Name and email go on the ticket as they are, so they must fit its limits.
+        if (name.Length > Ticket.MaxHolderFullNameLength)
+        {
+            throw new ArgumentException($"Name cannot exceed {Ticket.MaxHolderFullNameLength} characters.", nameof(name));
+        }
+
+        if (email.Length > Ticket.MaxHolderEmailLength)
+        {
+            throw new ArgumentException($"Email cannot exceed {Ticket.MaxHolderEmailLength} characters.", nameof(email));
+        }
 
         return new Purchase
         {
