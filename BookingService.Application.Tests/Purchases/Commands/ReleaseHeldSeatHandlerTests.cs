@@ -137,7 +137,7 @@ public class ReleaseHeldSeatHandlerTests
         Assert.Equal(ReleaseHeldSeatStatus.EventSeatNotFound, result.Status);
     }
 
-    private static ReleaseHeldSeatCommand Command(Purchase session, Guid eventSeatId) =>
+    private static ReleaseHeldSeatCommand Command(PurchaseSession session, Guid eventSeatId) =>
         new(session.Id, EventId, eventSeatId);
 
     private static ReleaseHeldSeatHandler Handler(
@@ -147,23 +147,23 @@ public class ReleaseHeldSeatHandlerTests
         FakeEventCatalog? catalog = null) =>
         new(sessions, catalog ?? new FakeEventCatalog(EventId), repository, locks);
 
-    private static Purchase Session(params Guid[] heldEventSeatIds)
+    private static PurchaseSession Session(params Guid[] heldEventSeatIds)
     {
         var nowUtc = DateTime.UtcNow;
-        var session = Purchase.Start("Juan Perez", "juan.perez@example.com", nowUtc, SessionDuration);
-        if (heldEventSeatIds.Length > 0)
+        var session = PurchaseSession.Start(EventId, "Juan Perez", "juan.perez@example.com", nowUtc, SessionDuration);
+        foreach (var eventSeatId in heldEventSeatIds)
         {
-            session.Hold(EventId, heldEventSeatIds, heldEventSeatIds.Length, nowUtc);
+            session.Hold(EventId, eventSeatId, heldEventSeatIds.Length, nowUtc);
         }
 
         return session;
     }
 
-    private static Purchase ExpiredSession(Guid heldEventSeatId)
+    private static PurchaseSession ExpiredSession(Guid heldEventSeatId)
     {
         var startedAtUtc = DateTime.UtcNow - SessionDuration - TimeSpan.FromMinutes(1);
-        var session = Purchase.Start("Juan Perez", "juan.perez@example.com", startedAtUtc, SessionDuration);
-        session.Hold(EventId, [heldEventSeatId], 3, startedAtUtc);
+        var session = PurchaseSession.Start(EventId, "Juan Perez", "juan.perez@example.com", startedAtUtc, SessionDuration);
+        session.Hold(EventId, heldEventSeatId, 3, startedAtUtc);
         return session;
     }
 

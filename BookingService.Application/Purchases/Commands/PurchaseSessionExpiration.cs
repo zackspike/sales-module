@@ -16,7 +16,7 @@ internal static class PurchaseSessionExpiration
     // This covers the slack between the two, and the buyer who closes the browser and never calls back.
     // ponytail: a loop, not a batch: a purchase holds at most PurchaseSessionOptions.MaxSeats seats.
     public static async Task ReleaseHeldSeatsAsync(
-        Purchase purchase,
+        PurchaseSession purchase,
         IEventSeatLockStore eventSeatLocks,
         CancellationToken cancellationToken)
     {

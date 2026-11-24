@@ -76,20 +76,20 @@ public sealed class HoldSeatHandler
         try
         {
             // Not wrapped for PurchaseExpiredException: the same nowUtc already passed IsExpired above.
-            purchase.Hold(command.EventId, [command.EventSeatId], _options.MaxSeats, nowUtc);
+            purchase.Hold(command.EventId, command.EventSeatId, _options.MaxSeats, nowUtc);
         }
         catch (SeatLimitReachedException)
         {
             return HoldSeatResult.Failed(HoldSeatStatus.SeatLimitReached);
         }
-        // A purchase belongs to a single event: the payment token covers one event's seats. The rule
-        // lives in Purchase.Hold; the filter keeps a misconfigured MaxSeats (ArgumentOutOfRangeException)
+        // A session is opened for a single event: the payment token covers one event's seats. The rule
+        // lives in PurchaseSession.Hold; the filter keeps a misconfigured MaxSeats (ArgumentOutOfRangeException)
         // a 500.
         catch (ArgumentException ex) when (ex.ParamName == "eventId")
         {
             return HoldSeatResult.Invalid(new Dictionary<string, string[]>
             {
-                ["eventId"] = ["The purchase already holds seats of another event."]
+                ["eventId"] = ["The purchase session was opened for another event."]
             });
         }
 
@@ -128,7 +128,7 @@ public sealed class HoldSeatHandler
     /// the rest of the selection.
     /// </summary>
     private async Task<HoldSeatResult> DropHeldSeatAsync(
-        Purchase purchase,
+        PurchaseSession purchase,
         Guid eventSeatId,
         HoldSeatStatus status,
         CancellationToken cancellationToken)

@@ -220,7 +220,7 @@ public class HoldSeatHandlerTests
         var session = Session();
         var seat = Seat();
         var buyer = Session();
-        buyer.Hold(EventId, [seat.Id], 1, DateTime.UtcNow);
+        buyer.Hold(EventId, seat.Id, 1, DateTime.UtcNow);
         seat.Sell(buyer, DateTime.UtcNow);
         var locks = new FakeEventSeatLockStore();
 
@@ -288,7 +288,7 @@ public class HoldSeatHandlerTests
         Assert.Empty(session.HeldEventSeatIds);
     }
 
-    private static HoldSeatCommand Command(Purchase session, Guid eventSeatId) =>
+    private static HoldSeatCommand Command(PurchaseSession session, Guid eventSeatId) =>
         new(session.Id, EventId, eventSeatId);
 
     private static HoldSeatHandler Handler(
@@ -304,15 +304,15 @@ public class HoldSeatHandlerTests
             locks,
             new PurchaseSessionOptions { SessionDuration = SessionDuration, MaxSeats = maxSeats });
 
-    private static Purchase Session() =>
-        Purchase.Start("Juan Perez", "juan.perez@example.com", DateTime.UtcNow, SessionDuration);
+    private static PurchaseSession Session() =>
+        PurchaseSession.Start(EventId, "Juan Perez", "juan.perez@example.com", DateTime.UtcNow, SessionDuration);
 
     /// <summary>A session that is still stored but whose deadline already passed, holding the given seat.</summary>
-    private static Purchase ExpiredSession(Guid heldEventSeatId)
+    private static PurchaseSession ExpiredSession(Guid heldEventSeatId)
     {
         var startedAtUtc = DateTime.UtcNow - SessionDuration - TimeSpan.FromMinutes(1);
-        var session = Purchase.Start("Juan Perez", "juan.perez@example.com", startedAtUtc, SessionDuration);
-        session.Hold(EventId, [heldEventSeatId], 3, startedAtUtc);
+        var session = PurchaseSession.Start(EventId, "Juan Perez", "juan.perez@example.com", startedAtUtc, SessionDuration);
+        session.Hold(EventId, heldEventSeatId, 3, startedAtUtc);
         return session;
     }
 

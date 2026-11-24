@@ -6,6 +6,7 @@ namespace BookingService.Application.Tests.Purchases.Commands;
 
 public class StartPurchaseHandlerTests
 {
+    private static readonly Guid EventId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly TimeSpan SessionDuration = TimeSpan.FromMinutes(7);
 
     [Fact]
@@ -23,6 +24,7 @@ public class StartPurchaseHandlerTests
 
         var stored = Assert.Single(sessions.Sessions).Value;
         Assert.Equal(result.Purchase.PurchaseId, stored.Id);
+        Assert.Equal(EventId, stored.EventId);
         Assert.Equal("Juan Perez", stored.Name);
         Assert.Equal("juan.perez@example.com", stored.Email);
         Assert.Empty(stored.HeldEventSeatIds);
@@ -91,6 +93,20 @@ public class StartPurchaseHandlerTests
     }
 
     [Fact]
+    public async Task Missing_event_is_rejected_without_opening_a_session()
+    {
+        var sessions = new FakePurchaseSessionStore();
+
+        var result = await Handler(sessions).HandleAsync(
+            new StartPurchaseCommand(Guid.Empty, "Juan Perez", "juan.perez@example.com"),
+            CancellationToken.None);
+
+        Assert.Equal(StartPurchaseStatus.Invalid, result.Status);
+        Assert.Equal("eventId", Assert.Single(result.Errors.Keys));
+        Assert.Empty(sessions.Sessions);
+    }
+
+    [Fact]
     public async Task Both_fields_are_reported_together()
     {
         var result = await Handler(new FakePurchaseSessionStore())
@@ -102,7 +118,7 @@ public class StartPurchaseHandlerTests
 
     private static StartPurchaseCommand Command(
         string name = "Juan Perez",
-        string email = "juan.perez@example.com") => new(name, email);
+        string email = "juan.perez@example.com") => new(EventId, name, email);
 
     private static StartPurchaseHandler Handler(FakePurchaseSessionStore sessions) =>
         new(sessions, new PurchaseSessionOptions { SessionDuration = SessionDuration });
