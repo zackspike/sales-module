@@ -16,9 +16,10 @@ public sealed class Purchase
     public DateTime ExpiresAtUtc { get; private set; }
 
     /// <summary>
-    /// Event of the first held seat. A purchase belongs to a single event; null until a seat is held.
+    /// The event the session was opened for. A purchase only holds seats of this event; to buy for another
+    /// event the fan opens a new session.
     /// </summary>
-    public Guid? EventId { get; private set; }
+    public Guid EventId { get; private set; }
 
     public IReadOnlyList<Guid> HeldEventSeatIds => _heldEventSeatIds;
 
@@ -32,7 +33,7 @@ public sealed class Purchase
     {
     }
 
-    public static Purchase Start(string name, string email, DateTime nowUtc, TimeSpan sessionDuration)
+    public static Purchase Start(Guid eventId, string name, string email, DateTime nowUtc, TimeSpan sessionDuration)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
@@ -52,6 +53,7 @@ public sealed class Purchase
         return new Purchase
         {
             Id = Guid.NewGuid(),
+            EventId = eventId,
             Name = name,
             Email = email,
             ExpiresAtUtc = nowUtc + sessionDuration
@@ -67,7 +69,7 @@ public sealed class Purchase
     /// holds it) must be dropped with <see cref="Release"/>; the others stay held (partial hold).
     /// </summary>
     /// <exception cref="PurchaseExpiredException">The session has expired.</exception>
-    /// <exception cref="ArgumentException">The seats belong to another event than the held ones.</exception>
+    /// <exception cref="ArgumentException">The seats belong to another event than the purchase.</exception>
     /// <exception cref="SeatLimitReachedException">Held plus new seats would exceed <paramref name="maxSeats"/>.</exception>
     public IReadOnlyList<Guid> Hold(Guid eventId, IEnumerable<Guid> eventSeatIds, int maxSeats, DateTime nowUtc)
     {
@@ -78,7 +80,7 @@ public sealed class Purchase
             throw new PurchaseExpiredException(Id);
         }
 
-        if (EventId is { } heldEventId && heldEventId != eventId)
+        if (eventId != EventId)
         {
             throw new ArgumentException("A purchase can only hold seats of a single event.", nameof(eventId));
         }
@@ -92,7 +94,6 @@ public sealed class Purchase
 
         if (newSeatIds.Count > 0)
         {
-            EventId ??= eventId;
             _heldEventSeatIds.AddRange(newSeatIds);
             PaymentToken = null;
         }
@@ -101,19 +102,13 @@ public sealed class Purchase
     }
 
     /// <summary>
-    /// Stops holding the seat. Does nothing if the purchase does not hold it. Releasing the last seat
-    /// frees the purchase from its event, so it can hold seats of another one.
+    /// Stops holding the seat. Does nothing if the purchase does not hold it.
     /// </summary>
     public void Release(Guid eventSeatId)
     {
         if (_heldEventSeatIds.Remove(eventSeatId))
         {
             PaymentToken = null;
-
-            if (_heldEventSeatIds.Count == 0)
-            {
-                EventId = null;
-            }
         }
     }
 

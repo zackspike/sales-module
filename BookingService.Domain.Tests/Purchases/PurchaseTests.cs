@@ -11,20 +11,20 @@ public class PurchaseTests
     private static readonly DateTime Now = new(2026, 11, 20, 18, 0, 0, DateTimeKind.Utc);
     private static readonly TimeSpan SessionDuration = TimeSpan.FromMinutes(10);
 
-    private static Purchase Start() => Purchase.Start("Juan Perez", "juan.perez@example.com", Now, SessionDuration);
+    private static Purchase Start() => Purchase.Start(EventId, "Juan Perez", "juan.perez@example.com", Now, SessionDuration);
 
     private static Guid[] Seats(int count) => Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToArray();
 
     [Fact]
-    public void Start_opens_a_session_without_seats_that_expires_after_its_duration()
+    public void Start_opens_a_session_for_an_event_without_seats_that_expires_after_its_duration()
     {
         var purchase = Start();
 
         Assert.NotEqual(Guid.Empty, purchase.Id);
+        Assert.Equal(EventId, purchase.EventId);
         Assert.Equal("Juan Perez", purchase.Name);
         Assert.Equal("juan.perez@example.com", purchase.Email);
         Assert.Equal(Now + SessionDuration, purchase.ExpiresAtUtc);
-        Assert.Null(purchase.EventId);
         Assert.Empty(purchase.HeldEventSeatIds);
         Assert.Null(purchase.PaymentToken);
     }
@@ -35,7 +35,7 @@ public class PurchaseTests
         var name = new string('a', Ticket.MaxHolderFullNameLength);
         var email = new string('a', Ticket.MaxHolderEmailLength - "@example.com".Length) + "@example.com";
 
-        var purchase = Purchase.Start(name, email, Now, SessionDuration);
+        var purchase = Purchase.Start(EventId, name, email, Now, SessionDuration);
 
         Assert.Equal(name, purchase.Name);
         Assert.Equal(email, purchase.Email);
@@ -46,7 +46,7 @@ public class PurchaseTests
     {
         var name = new string('a', Ticket.MaxHolderFullNameLength + 1);
 
-        Assert.Throws<ArgumentException>(() => Purchase.Start(name, "juan.perez@example.com", Now, SessionDuration));
+        Assert.Throws<ArgumentException>(() => Purchase.Start(EventId, name, "juan.perez@example.com", Now, SessionDuration));
     }
 
     [Fact]
@@ -54,11 +54,11 @@ public class PurchaseTests
     {
         var email = new string('a', Ticket.MaxHolderEmailLength - "@example.com".Length + 1) + "@example.com";
 
-        Assert.Throws<ArgumentException>(() => Purchase.Start("Juan Perez", email, Now, SessionDuration));
+        Assert.Throws<ArgumentException>(() => Purchase.Start(EventId, "Juan Perez", email, Now, SessionDuration));
     }
 
     [Fact]
-    public void Hold_holds_new_seats_and_takes_the_event_of_the_first_hold()
+    public void Hold_holds_new_seats()
     {
         var purchase = Start();
         var seats = Seats(2);
@@ -67,7 +67,6 @@ public class PurchaseTests
 
         Assert.Equal(seats, newSeats);
         Assert.Equal(seats, purchase.HeldEventSeatIds);
-        Assert.Equal(EventId, purchase.EventId);
     }
 
     [Fact]
@@ -119,26 +118,29 @@ public class PurchaseTests
         Assert.Throws<ArgumentException>(() => purchase.Hold(OtherEventId, Seats(1), MaxSeats, Now));
 
         Assert.Equal(held, purchase.HeldEventSeatIds);
-        Assert.Equal(EventId, purchase.EventId);
     }
 
     [Fact]
-    public void Releasing_every_seat_allows_holding_seats_of_another_event()
+    public void Session_without_seats_cannot_hold_seats_of_another_event()
     {
         var purchase = Start();
-        var held = Seats(2);
+
+        Assert.Throws<ArgumentException>(() => purchase.Hold(OtherEventId, Seats(1), MaxSeats, Now));
+
+        Assert.Empty(purchase.HeldEventSeatIds);
+    }
+
+    [Fact]
+    public void Releasing_every_seat_keeps_the_session_bound_to_its_event()
+    {
+        var purchase = Start();
+        var held = Seats(1);
         purchase.Hold(EventId, held, MaxSeats, Now);
 
         purchase.Release(held[0]);
+
         Assert.Equal(EventId, purchase.EventId);
-        purchase.Release(held[1]);
-        Assert.Null(purchase.EventId);
-
-        var seats = Seats(1);
-        purchase.Hold(OtherEventId, seats, MaxSeats, Now);
-
-        Assert.Equal(OtherEventId, purchase.EventId);
-        Assert.Equal(seats, purchase.HeldEventSeatIds);
+        Assert.Throws<ArgumentException>(() => purchase.Hold(OtherEventId, Seats(1), MaxSeats, Now));
     }
 
     [Fact]
