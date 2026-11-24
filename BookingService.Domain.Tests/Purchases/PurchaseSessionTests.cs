@@ -3,7 +3,7 @@ using BookingService.Domain.Tickets;
 
 namespace BookingService.Domain.Tests.Purchases;
 
-public class PurchaseTests
+public class PurchaseSessionTests
 {
     private const int MaxSeats = 3;
     private static readonly Guid EventId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -11,9 +11,9 @@ public class PurchaseTests
     private static readonly DateTime Now = new(2026, 11, 20, 18, 0, 0, DateTimeKind.Utc);
     private static readonly TimeSpan SessionDuration = TimeSpan.FromMinutes(10);
 
-    private static Purchase Start() => Purchase.Start(EventId, "Juan Perez", "juan.perez@example.com", Now, SessionDuration);
+    private static PurchaseSession Start() => PurchaseSession.Start(EventId, "Juan Perez", "juan.perez@example.com", Now, SessionDuration);
 
-    private static Guid[] HoldSeats(Purchase purchase, int count)
+    private static Guid[] HoldSeats(PurchaseSession purchase, int count)
     {
         var seats = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToArray();
         foreach (var seat in seats)
@@ -44,7 +44,7 @@ public class PurchaseTests
         var name = new string('a', Ticket.MaxHolderFullNameLength);
         var email = new string('a', Ticket.MaxHolderEmailLength - "@example.com".Length) + "@example.com";
 
-        var purchase = Purchase.Start(EventId, name, email, Now, SessionDuration);
+        var purchase = PurchaseSession.Start(EventId, name, email, Now, SessionDuration);
 
         Assert.Equal(name, purchase.Name);
         Assert.Equal(email, purchase.Email);
@@ -55,7 +55,7 @@ public class PurchaseTests
     {
         var name = new string('a', Ticket.MaxHolderFullNameLength + 1);
 
-        Assert.Throws<ArgumentException>(() => Purchase.Start(EventId, name, "juan.perez@example.com", Now, SessionDuration));
+        Assert.Throws<ArgumentException>(() => PurchaseSession.Start(EventId, name, "juan.perez@example.com", Now, SessionDuration));
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class PurchaseTests
     {
         var email = new string('a', Ticket.MaxHolderEmailLength - "@example.com".Length + 1) + "@example.com";
 
-        Assert.Throws<ArgumentException>(() => Purchase.Start(EventId, "Juan Perez", email, Now, SessionDuration));
+        Assert.Throws<ArgumentException>(() => PurchaseSession.Start(EventId, "Juan Perez", email, Now, SessionDuration));
     }
 
     [Fact]

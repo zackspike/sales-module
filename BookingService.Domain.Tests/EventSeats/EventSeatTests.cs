@@ -10,9 +10,9 @@ public class EventSeatTests
     private static readonly Guid ZoneId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly DateTime SoldAt = new(2026, 9, 26, 18, 30, 0, DateTimeKind.Utc);
 
-    private static Purchase PurchaseHolding(EventSeat seat, string name = "Juan Perez", string email = "juan.perez@example.com")
+    private static PurchaseSession PurchaseHolding(EventSeat seat, string name = "Juan Perez", string email = "juan.perez@example.com")
     {
-        var purchase = Purchase.Start(seat.EventId, name, email, SoldAt, TimeSpan.FromMinutes(10));
+        var purchase = PurchaseSession.Start(seat.EventId, name, email, SoldAt, TimeSpan.FromMinutes(10));
         purchase.Hold(seat.EventId, seat.Id, maxSeats: 3, SoldAt);
         return purchase;
     }

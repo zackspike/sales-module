@@ -6,7 +6,7 @@ namespace BookingService.Domain.Purchases;
 /// A fan's purchase session: who buys, until when, which seats of a single event they hold and
 /// the payment token. Held seats expire with the session (ADR-001): holding again never renews it.
 /// </summary>
-public sealed class Purchase
+public sealed class PurchaseSession
 {
     private readonly List<Guid> _heldEventSeatIds = [];
 
@@ -29,11 +29,11 @@ public sealed class Purchase
     /// </summary>
     public string? PaymentToken { get; private set; }
 
-    private Purchase()
+    private PurchaseSession()
     {
     }
 
-    public static Purchase Start(Guid eventId, string name, string email, DateTime nowUtc, TimeSpan sessionDuration)
+    public static PurchaseSession Start(Guid eventId, string name, string email, DateTime nowUtc, TimeSpan sessionDuration)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
@@ -50,7 +50,7 @@ public sealed class Purchase
             throw new ArgumentException($"Email cannot exceed {Ticket.MaxHolderEmailLength} characters.", nameof(email));
         }
 
-        return new Purchase
+        return new PurchaseSession
         {
             Id = Guid.NewGuid(),
             EventId = eventId,

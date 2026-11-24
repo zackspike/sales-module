@@ -42,11 +42,11 @@ public class EventSeat
     /// <exception cref="InvalidOperationException">The purchase does not hold this seat.</exception>
     /// <exception cref="PurchaseExpiredException">The purchase expired: its seat locks are gone.</exception>
     /// <exception cref="EventSeatAlreadySoldException"></exception>
-    public Ticket Sell(Purchase purchase, DateTime soldAtUtc)
+    public Ticket Sell(PurchaseSession purchase, DateTime soldAtUtc)
     {
         if (!purchase.HeldEventSeatIds.Contains(Id))
         {
-            throw new InvalidOperationException($"Purchase {purchase.Id} does not hold event seat {Id}.");
+            throw new InvalidOperationException($"Purchase session {purchase.Id} does not hold event seat {Id}.");
         }
 
         if (purchase.IsExpired(soldAtUtc))
@@ -61,7 +61,7 @@ public class EventSeat
     /// Sells this seat to the given customer. A seat can only be sold once.
     /// </summary>
     /// <exception cref="EventSeatAlreadySoldException"></exception>
-    [Obsolete("Name and email come from the purchase: use Sell(Purchase, DateTime). Remove when Application moves to Purchase.")]
+    [Obsolete("Name and email come from the purchase: use Sell(PurchaseSession, DateTime). Remove when Application moves to PurchaseSession.")]
     public Ticket Sell(string holderName, string holderEmail, DateTime soldAtUtc) => SellTo(holderName, holderEmail, soldAtUtc);
 
     private Ticket SellTo(string holderName, string holderEmail, DateTime soldAtUtc)
