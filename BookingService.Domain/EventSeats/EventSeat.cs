@@ -1,3 +1,4 @@
+using BookingService.Domain.Purchases;
 using BookingService.Domain.Tickets;
 
 namespace BookingService.Domain.EventSeats;
@@ -35,10 +36,35 @@ public class EventSeat
     }
 
     /// <summary>
+    /// Sells this seat to the buyer of the purchase, whose name and email go on the ticket.
+    /// A seat can only be sold once, and only to an unexpired purchase that holds it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The purchase does not hold this seat.</exception>
+    /// <exception cref="PurchaseExpiredException">The purchase expired: its seat locks are gone.</exception>
+    /// <exception cref="EventSeatAlreadySoldException"></exception>
+    public Ticket Sell(PurchaseSession purchase, DateTime soldAtUtc)
+    {
+        if (!purchase.HeldEventSeatIds.Contains(Id))
+        {
+            throw new InvalidOperationException($"Purchase session {purchase.Id} does not hold event seat {Id}.");
+        }
+
+        if (purchase.IsExpired(soldAtUtc))
+        {
+            throw new PurchaseExpiredException(purchase.Id);
+        }
+
+        return SellTo(purchase.Name, purchase.Email, soldAtUtc);
+    }
+
+    /// <summary>
     /// Sells this seat to the given customer. A seat can only be sold once.
     /// </summary>
     /// <exception cref="EventSeatAlreadySoldException"></exception>
-    public Ticket Sell(string holderName, string holderEmail, DateTime soldAtUtc)
+    [Obsolete("Name and email come from the purchase: use Sell(PurchaseSession, DateTime). Remove when Application moves to PurchaseSession.")]
+    public Ticket Sell(string holderName, string holderEmail, DateTime soldAtUtc) => SellTo(holderName, holderEmail, soldAtUtc);
+
+    private Ticket SellTo(string holderName, string holderEmail, DateTime soldAtUtc)
     {
         if (Status == EventSeatStatus.Sold)
         {
