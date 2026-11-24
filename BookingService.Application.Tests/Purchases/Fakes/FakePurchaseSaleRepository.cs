@@ -7,7 +7,7 @@ namespace BookingService.Application.Tests.Purchases.Fakes;
 
 /// <summary>
 /// In-memory <see cref="IPurchaseSaleRepository"/> that honours the transaction contract: the sale is kept only
-/// if <c>confirm</c> returns true; otherwise the seats go back to available and the outbox rolls back.
+/// if <c>capture</c> succeeds; otherwise the seats go back to available and the outbox rolls back.
 /// </summary>
 public sealed class FakePurchaseSaleRepository(FakeTicketSoldOutbox outbox, params EventSeat[] seats)
     : IPurchaseSaleRepository
@@ -17,13 +17,18 @@ public sealed class FakePurchaseSaleRepository(FakeTicketSoldOutbox outbox, para
 
     public int SellCalls { get; private set; }
 
-    public int ConfirmCalls { get; private set; }
+    public int CaptureCallbacks { get; private set; }
+
+    public Task<PurchaseSaleRecord?> FindByIdempotencyKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
+        Task.FromResult(_salesByKey.TryGetValue(idempotencyKey, out var used)
+            ? new PurchaseSaleRecord(used.PurchaseId, used.Sales)
+            : null);
 
     public async Task<PurchaseSaleOutcome> SellOnceAsync(
         Guid idempotencyKey,
         PurchaseSession purchase,
         Func<EventSeat, Ticket> sell,
-        Func<IReadOnlyList<EventSeatSale>, CancellationToken, Task<bool>> confirm,
+        Func<IReadOnlyList<EventSeatSale>, CancellationToken, Task<PaymentCaptureResult>> capture,
         CancellationToken cancellationToken)
     {
         SellCalls++;
@@ -31,35 +36,42 @@ public sealed class FakePurchaseSaleRepository(FakeTicketSoldOutbox outbox, para
         if (_salesByKey.TryGetValue(idempotencyKey, out var used))
         {
             return used.PurchaseId == purchase.Id
-                ? new PurchaseSaleOutcome(PurchaseSaleStatus.Replayed, used.Sales)
-                : Nothing(PurchaseSaleStatus.IdempotencyKeyConflict);
+                ? PurchaseSaleOutcome.Replayed(used.Sales)
+                : PurchaseSaleOutcome.IdempotencyKeyConflict();
         }
 
         var heldSeats = new List<EventSeat>();
+        var failedSeats = new List<FailedEventSeat>();
         foreach (var eventSeatId in purchase.HeldEventSeatIds)
         {
             var seat = _seats.FirstOrDefault(candidate =>
                 candidate.EventId == purchase.EventId && candidate.Id == eventSeatId);
             if (seat is null)
             {
-                return Nothing(PurchaseSaleStatus.EventSeatNotFound);
+                failedSeats.Add(new FailedEventSeat(eventSeatId, SeatSaleFailure.NotFound));
             }
-
-            if (seat.Status == EventSeatStatus.Sold)
+            else if (seat.Status == EventSeatStatus.Sold)
             {
-                return Nothing(PurchaseSaleStatus.AlreadySold);
+                failedSeats.Add(new FailedEventSeat(eventSeatId, SeatSaleFailure.AlreadySold));
             }
+            else
+            {
+                heldSeats.Add(seat);
+            }
+        }
 
-            heldSeats.Add(seat);
+        if (failedSeats.Count > 0)
+        {
+            return PurchaseSaleOutcome.SeatsUnavailable(failedSeats);
         }
 
         var sales = heldSeats.Select(seat => new EventSeatSale(seat, sell(seat))).ToList();
 
-        ConfirmCalls++;
-        bool confirmed;
+        CaptureCallbacks++;
+        PaymentCaptureResult captured;
         try
         {
-            confirmed = await confirm(sales, cancellationToken);
+            captured = await capture(sales, cancellationToken);
         }
         catch
         {
@@ -67,15 +79,15 @@ public sealed class FakePurchaseSaleRepository(FakeTicketSoldOutbox outbox, para
             throw;
         }
 
-        if (!confirmed)
+        if (captured.Status != PaymentCallStatus.Succeeded)
         {
             Rollback(heldSeats);
-            return Nothing(PurchaseSaleStatus.NotConfirmed);
+            return PurchaseSaleOutcome.NotCaptured(captured.Status);
         }
 
         outbox.Commit();
         _salesByKey[idempotencyKey] = (purchase.Id, sales);
-        return new PurchaseSaleOutcome(PurchaseSaleStatus.Sold, sales);
+        return PurchaseSaleOutcome.Sold(sales);
     }
 
     private void Rollback(IEnumerable<EventSeat> soldSeats)
@@ -88,6 +100,4 @@ public sealed class FakePurchaseSaleRepository(FakeTicketSoldOutbox outbox, para
             typeof(EventSeat).GetProperty(nameof(EventSeat.Status))!.SetValue(seat, EventSeatStatus.Available);
         }
     }
-
-    private static PurchaseSaleOutcome Nothing(PurchaseSaleStatus status) => new(status, []);
 }

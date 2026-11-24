@@ -52,6 +52,11 @@ public class ConfirmPurchaseHandlerTests
         // The sold seats are no longer held, and the event's cached seats are dropped.
         Assert.Empty(context.Locks.Holders);
         Assert.Equal(1, context.Cache.InvalidateCalls);
+
+        // The sold seats and the spent token leave the session, so it can hold other seats.
+        var stored = context.Sessions.Sessions[session.Id];
+        Assert.Empty(stored.HeldEventSeatIds);
+        Assert.Null(stored.PaymentToken);
     }
 
     [Theory]
@@ -119,8 +124,62 @@ public class ConfirmPurchaseHandlerTests
         Assert.Equal("A-1", replay.Purchase.Tickets.Single().SeatNumber);
 
         Assert.Equal(1, context.Payment.CaptureCalls);
-        Assert.Equal(1, context.Sales.ConfirmCalls);
+        Assert.Equal(1, context.Sales.CaptureCallbacks);
+        Assert.Equal(1, context.Sales.SellCalls);
         Assert.Single(context.Outbox.Committed);
+    }
+
+    [Fact]
+    public async Task Replay_with_less_time_left_than_the_capture_timeout_still_returns_the_tickets()
+    {
+        // The fan paid, the response was lost and the retry arrives when the session is almost over: the
+        // contract (1.5) answers a replay with 200, so the margin of decision 15 must not apply to it.
+        var seat = Seat();
+        var context = new Context([seat]);
+        var session = context.SessionHolding(seat);
+        var key = Guid.NewGuid();
+        var first = await context.Handler().HandleAsync(new(session.Id, key), CancellationToken.None);
+
+        var replay = await context.Handler(captureTimeout: SessionDuration + TimeSpan.FromMinutes(1))
+            .HandleAsync(new(session.Id, key), CancellationToken.None);
+
+        Assert.Equal(ConfirmPurchaseStatus.Replayed, replay.Status);
+        Assert.Equal(
+            first.Purchase!.Tickets.Select(ticket => ticket.TicketCode),
+            replay.Purchase!.Tickets.Select(ticket => ticket.TicketCode));
+        Assert.Equal(1, context.Payment.CaptureCalls);
+    }
+
+    [Fact]
+    public async Task Session_can_hold_and_pay_other_seats_after_paying()
+    {
+        var paid = Seat();
+        var next = Seat();
+        var context = new Context([paid, next]);
+        var session = context.SessionHolding(paid);
+        var handler = context.Handler();
+        await handler.HandleAsync(new(session.Id, Guid.NewGuid()), CancellationToken.None);
+
+        var stored = context.Sessions.Sessions[session.Id];
+        stored.Hold(EventId, next.Id, 3, DateTime.UtcNow);
+        context.Locks.TryAcquire(next.Id, session.Id.ToString(), SessionDuration);
+        stored.SetPaymentToken("pay_tok_2");
+
+        var result = await handler.HandleAsync(new(session.Id, Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(ConfirmPurchaseStatus.Purchased, result.Status);
+        Assert.Equal(next.Id, result.Purchase!.Tickets.Single().EventSeatId);
+        Assert.Equal("pay_tok_2", context.Payment.LastCapturedToken);
+        Assert.Equal(EventSeatStatus.Sold, next.Status);
+    }
+
+    [Fact]
+    public void Capture_timeout_and_attempts_must_be_positive()
+    {
+        var context = new Context([]);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => context.Handler(captureTimeout: TimeSpan.Zero));
+        Assert.Throws<ArgumentOutOfRangeException>(() => context.Handler(captureAttempts: 0));
     }
 
     [Fact]
@@ -190,6 +249,24 @@ public class ConfirmPurchaseHandlerTests
     }
 
     [Fact]
+    public async Task Session_with_time_for_one_capture_but_not_its_retry_is_expired_without_calling_payment()
+    {
+        // 15 s left covers one 10 s capture but not the retry of decision 11: the token and the seat locks
+        // (decision 17) could run out while the sale is in flight.
+        var seat = Seat();
+        var context = new Context([seat]);
+        var startedAtUtc = DateTime.UtcNow - SessionDuration + TimeSpan.FromSeconds(15);
+        var session = context.SessionHolding(startedAtUtc, seat);
+
+        var result = await context.Handler(captureTimeout: TimeSpan.FromSeconds(10), captureAttempts: 2)
+            .HandleAsync(new(session.Id, Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(ConfirmPurchaseStatus.SessionExpired, result.Status);
+        Assert.Equal(0, context.Sales.SellCalls);
+        Assert.Equal(0, context.Payment.CaptureCalls);
+    }
+
+    [Fact]
     public async Task Expired_session_frees_its_seats_without_calling_payment()
     {
         var seat = Seat();
@@ -244,9 +321,51 @@ public class ConfirmPurchaseHandlerTests
         var result = await context.Handler().HandleAsync(new(session.Id, Guid.NewGuid()), CancellationToken.None);
 
         Assert.Equal(ConfirmPurchaseStatus.AlreadySold, result.Status);
+        Assert.Equal([new FailedEventSeat(sold.Id, SeatSaleFailure.AlreadySold)], result.FailedSeats);
         Assert.Equal(EventSeatStatus.Available, held.Status);
         Assert.Equal(0, context.Payment.CaptureCalls);
         Assert.Empty(context.Outbox.Committed);
+    }
+
+    [Fact]
+    public async Task Every_failed_seat_is_reported_with_its_reason()
+    {
+        var held = Seat();
+        var sold = Seat();
+        var missing = Seat();
+        var otherBuyer = PurchaseSession.Start(sold.EventId, "Ana Lopez", "ana@example.com", DateTime.UtcNow, SessionDuration);
+        otherBuyer.Hold(sold.EventId, sold.Id, 1, DateTime.UtcNow);
+        sold.Sell(otherBuyer, DateTime.UtcNow);
+
+        // `missing` is held by the session but no longer exists in the event.
+        var context = new Context([held, sold]);
+        var session = context.SessionHolding(held, sold, missing);
+
+        var result = await context.Handler().HandleAsync(new(session.Id, Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(ConfirmPurchaseStatus.AlreadySold, result.Status);
+        Assert.Equal(
+            [
+                new FailedEventSeat(sold.Id, SeatSaleFailure.AlreadySold),
+                new FailedEventSeat(missing.Id, SeatSaleFailure.NotFound)
+            ],
+            result.FailedSeats);
+        Assert.Equal(EventSeatStatus.Available, held.Status);
+        Assert.Equal(0, context.Payment.CaptureCalls);
+    }
+
+    [Fact]
+    public async Task Only_missing_seats_answer_seat_not_found()
+    {
+        var missing = Seat();
+        var context = new Context([]);
+        var session = context.SessionHolding(missing);
+
+        var result = await context.Handler().HandleAsync(new(session.Id, Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(ConfirmPurchaseStatus.EventSeatNotFound, result.Status);
+        Assert.Equal([new FailedEventSeat(missing.Id, SeatSaleFailure.NotFound)], result.FailedSeats);
+        Assert.Equal(0, context.Payment.CaptureCalls);
     }
 
     [Fact]
@@ -290,7 +409,7 @@ public class ConfirmPurchaseHandlerTests
 
         public FakePaymentGateway Payment { get; } = new();
 
-        public ConfirmPurchaseHandler Handler(TimeSpan? captureTimeout = null) =>
+        public ConfirmPurchaseHandler Handler(TimeSpan? captureTimeout = null, int captureAttempts = 1) =>
             new(Sessions,
                 Sales,
                 _venueCatalog,
@@ -298,7 +417,11 @@ public class ConfirmPurchaseHandlerTests
                 Cache,
                 Outbox,
                 Payment,
-                new PaymentOptions { CaptureTimeout = captureTimeout ?? TimeSpan.FromSeconds(10) },
+                new PaymentOptions
+                {
+                    CaptureTimeout = captureTimeout ?? TimeSpan.FromSeconds(10),
+                    CaptureAttempts = captureAttempts
+                },
                 NullLogger<ConfirmPurchaseHandler>.Instance);
 
         /// <summary>A live session holding the given seats (locked for it) with a payment token.</summary>

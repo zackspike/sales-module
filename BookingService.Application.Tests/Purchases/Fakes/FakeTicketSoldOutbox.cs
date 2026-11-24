@@ -8,12 +8,12 @@ namespace BookingService.Application.Tests.Purchases.Fakes;
 /// </summary>
 public sealed class FakeTicketSoldOutbox : ITicketSoldOutbox
 {
-    private readonly List<TicketSold> _pending = [];
-    private readonly List<TicketSold> _committed = [];
+    private readonly List<TicketSoldEvent> _pending = [];
+    private readonly List<TicketSoldEvent> _committed = [];
 
-    public IReadOnlyList<TicketSold> Committed => _committed;
+    public IReadOnlyList<TicketSoldEvent> Committed => _committed;
 
-    public Task AddAsync(IReadOnlyList<TicketSold> messages, CancellationToken cancellationToken)
+    public Task AddAsync(IReadOnlyList<TicketSoldEvent> messages, CancellationToken cancellationToken)
     {
         _pending.AddRange(messages);
         return Task.CompletedTask;
