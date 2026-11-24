@@ -17,7 +17,7 @@ public interface IPurchaseSaleRepository
     /// <item>If the key was already used, nothing is sold and nothing is called: the sales made with it are
     /// returned as <see cref="PurchaseSaleStatus.Replayed"/> when they belong to the same purchase, or
     /// <see cref="PurchaseSaleStatus.IdempotencyKeyConflict"/> otherwise.</item>
-    /// <item>Otherwise, inside one transaction, every held seat of <see cref="Purchase.EventId"/> is read,
+    /// <item>Otherwise, inside one transaction, every held seat of <see cref="PurchaseSession.EventId"/> is read,
     /// sold with <paramref name="sell"/> and stored with its ticket and the key; then
     /// <paramref name="confirm"/> runs with the sales, still inside the transaction.</item>
     /// <item>The transaction commits only if <paramref name="confirm"/> returns true; otherwise it rolls back
@@ -29,7 +29,7 @@ public interface IPurchaseSaleRepository
     /// </summary>
     Task<PurchaseSaleOutcome> SellOnceAsync(
         Guid idempotencyKey,
-        Purchase purchase,
+        PurchaseSession purchase,
         Func<EventSeat, Ticket> sell,
         Func<IReadOnlyList<EventSeatSale>, CancellationToken, Task<bool>> confirm,
         CancellationToken cancellationToken);

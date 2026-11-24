@@ -21,7 +21,7 @@ public sealed class FakePurchaseSaleRepository(FakeTicketSoldOutbox outbox, para
 
     public async Task<PurchaseSaleOutcome> SellOnceAsync(
         Guid idempotencyKey,
-        Purchase purchase,
+        PurchaseSession purchase,
         Func<EventSeat, Ticket> sell,
         Func<IReadOnlyList<EventSeatSale>, CancellationToken, Task<bool>> confirm,
         CancellationToken cancellationToken)

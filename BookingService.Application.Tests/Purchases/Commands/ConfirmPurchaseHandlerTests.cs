@@ -235,8 +235,8 @@ public class ConfirmPurchaseHandlerTests
     {
         var held = Seat();
         var sold = Seat();
-        var otherBuyer = Purchase.Start("Ana Lopez", "ana@example.com", DateTime.UtcNow, SessionDuration);
-        otherBuyer.Hold(sold.EventId, [sold.Id], 1, DateTime.UtcNow);
+        var otherBuyer = PurchaseSession.Start(sold.EventId, "Ana Lopez", "ana@example.com", DateTime.UtcNow, SessionDuration);
+        otherBuyer.Hold(sold.EventId, sold.Id, 1, DateTime.UtcNow);
         sold.Sell(otherBuyer, DateTime.UtcNow);
         var context = new Context([held, sold]);
         var session = context.SessionHolding(held, sold);
@@ -302,23 +302,23 @@ public class ConfirmPurchaseHandlerTests
                 NullLogger<ConfirmPurchaseHandler>.Instance);
 
         /// <summary>A live session holding the given seats (locked for it) with a payment token.</summary>
-        public Purchase SessionHolding(params EventSeat[] seats) => SessionHolding(DateTime.UtcNow, seats);
+        public PurchaseSession SessionHolding(params EventSeat[] seats) => SessionHolding(DateTime.UtcNow, seats);
 
-        public Purchase SessionHolding(DateTime startedAtUtc, params EventSeat[] seats)
+        public PurchaseSession SessionHolding(DateTime startedAtUtc, params EventSeat[] seats)
         {
             var session = SessionWithoutToken(startedAtUtc, seats);
             session.SetPaymentToken(Token);
             return session;
         }
 
-        public Purchase SessionWithoutToken(params EventSeat[] seats) => SessionWithoutToken(DateTime.UtcNow, seats);
+        public PurchaseSession SessionWithoutToken(params EventSeat[] seats) => SessionWithoutToken(DateTime.UtcNow, seats);
 
-        private Purchase SessionWithoutToken(DateTime startedAtUtc, EventSeat[] seats)
+        private PurchaseSession SessionWithoutToken(DateTime startedAtUtc, EventSeat[] seats)
         {
-            var session = Purchase.Start("Juan Perez", "juan.perez@example.com", startedAtUtc, SessionDuration);
-            if (seats.Length > 0)
+            var session = PurchaseSession.Start(EventId, "Juan Perez", "juan.perez@example.com", startedAtUtc, SessionDuration);
+            foreach (var seat in seats)
             {
-                session.Hold(EventId, seats.Select(seat => seat.Id), 3, startedAtUtc);
+                session.Hold(EventId, seat.Id, 3, startedAtUtc);
             }
 
             foreach (var seat in seats)

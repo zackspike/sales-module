@@ -13,7 +13,7 @@ namespace BookingService.Application.Purchases.Commands;
 /// (decision 15), and nothing reaches Payment without a payment token. Then, in one transaction, the seats
 /// are sold, one <c>ticketSold</c> per ticket goes to the outbox and Payment's <c>/capture</c> is called; the
 /// transaction commits only if Payment answers 200 (ADR-003), so a failed capture sells nothing.
-/// The "a seat is sold only once" rule lives in <see cref="EventSeat.Sell(Purchase, DateTime)"/>.
+/// The "a seat is sold only once" rule lives in <see cref="EventSeat.Sell(PurchaseSession, DateTime)"/>.
 /// </summary>
 public sealed class ConfirmPurchaseHandler
 {
@@ -165,7 +165,7 @@ public sealed class ConfirmPurchaseHandler
     /// failure is only logged: the sale is already committed, and the locks and the cache expire on their own.
     /// Runs with <see cref="CancellationToken.None"/>, so a request cancelled after the commit still updates them.
     /// </summary>
-    private async Task AfterPurchaseCommittedAsync(Purchase purchase, IReadOnlyList<EventSeatSale> sales)
+    private async Task AfterPurchaseCommittedAsync(PurchaseSession purchase, IReadOnlyList<EventSeatSale> sales)
     {
         var holder = PurchaseSeatLockHolder.Of(purchase.Id);
 

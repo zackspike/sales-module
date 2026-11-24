@@ -66,8 +66,8 @@ public class StartPaymentHandlerTests
     {
         var seatId = Guid.NewGuid();
         var startedAtUtc = DateTime.UtcNow - SessionDuration - TimeSpan.FromMinutes(1);
-        var session = Purchase.Start("Juan Perez", "juan.perez@example.com", startedAtUtc, SessionDuration);
-        session.Hold(EventId, [seatId], 3, startedAtUtc);
+        var session = PurchaseSession.Start(EventId, "Juan Perez", "juan.perez@example.com", startedAtUtc, SessionDuration);
+        session.Hold(EventId, seatId, 3, startedAtUtc);
         var locks = new FakeEventSeatLockStore();
         locks.TryAcquire(seatId, session.Id.ToString(), SessionDuration);
         var payment = new FakePaymentGateway();
@@ -130,13 +130,13 @@ public class StartPaymentHandlerTests
         FakeEventSeatLockStore? locks = null) =>
         new(sessions, locks ?? new FakeEventSeatLockStore(), payment);
 
-    private static Purchase SessionHolding(params Guid[] eventSeatIds)
+    private static PurchaseSession SessionHolding(params Guid[] eventSeatIds)
     {
         var nowUtc = DateTime.UtcNow;
-        var session = Purchase.Start("Juan Perez", "juan.perez@example.com", nowUtc, SessionDuration);
-        if (eventSeatIds.Length > 0)
+        var session = PurchaseSession.Start(EventId, "Juan Perez", "juan.perez@example.com", nowUtc, SessionDuration);
+        foreach (var eventSeatId in eventSeatIds)
         {
-            session.Hold(EventId, eventSeatIds, 3, nowUtc);
+            session.Hold(EventId, eventSeatId, 3, nowUtc);
         }
 
         return session;
