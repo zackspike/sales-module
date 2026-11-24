@@ -13,7 +13,7 @@ public class EventSeatTests
     private static Purchase PurchaseHolding(EventSeat seat, string name = "Juan Perez", string email = "juan.perez@example.com")
     {
         var purchase = Purchase.Start(seat.EventId, name, email, SoldAt, TimeSpan.FromMinutes(10));
-        purchase.Hold(seat.EventId, [seat.Id], maxSeats: 3, SoldAt);
+        purchase.Hold(seat.EventId, seat.Id, maxSeats: 3, SoldAt);
         return purchase;
     }
 

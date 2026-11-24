@@ -13,7 +13,16 @@ public class PurchaseTests
 
     private static Purchase Start() => Purchase.Start(EventId, "Juan Perez", "juan.perez@example.com", Now, SessionDuration);
 
-    private static Guid[] Seats(int count) => Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToArray();
+    private static Guid[] HoldSeats(Purchase purchase, int count)
+    {
+        var seats = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToArray();
+        foreach (var seat in seats)
+        {
+            purchase.Hold(EventId, seat, MaxSeats, Now);
+        }
+
+        return seats;
+    }
 
     [Fact]
     public void Start_opens_a_session_for_an_event_without_seats_that_expires_after_its_duration()
@@ -58,74 +67,56 @@ public class PurchaseTests
     }
 
     [Fact]
-    public void Hold_holds_new_seats()
+    public void Hold_holds_a_new_seat()
     {
         var purchase = Start();
-        var seats = Seats(2);
+        var seat = Guid.NewGuid();
 
-        var newSeats = purchase.Hold(EventId, seats, MaxSeats, Now);
+        Assert.True(purchase.Hold(EventId, seat, MaxSeats, Now));
 
-        Assert.Equal(seats, newSeats);
-        Assert.Equal(seats, purchase.HeldEventSeatIds);
+        Assert.Equal([seat], purchase.HeldEventSeatIds);
     }
 
     [Fact]
-    public void Repeating_a_hold_returns_no_new_seats_and_does_not_renew_the_session()
+    public void Repeating_a_hold_returns_false_and_does_not_renew_the_session()
     {
         var purchase = Start();
-        var seats = Seats(2);
-        purchase.Hold(EventId, seats, MaxSeats, Now);
+        var seat = HoldSeats(purchase, 1)[0];
 
-        var newSeats = purchase.Hold(EventId, [seats[0], seats[1], seats[1]], MaxSeats, Now.AddMinutes(5));
+        Assert.False(purchase.Hold(EventId, seat, MaxSeats, Now.AddMinutes(5)));
 
-        Assert.Empty(newSeats);
-        Assert.Equal(seats, purchase.HeldEventSeatIds);
+        Assert.Equal([seat], purchase.HeldEventSeatIds);
         Assert.Equal(Now + SessionDuration, purchase.ExpiresAtUtc);
     }
 
     [Fact]
-    public void Hold_beyond_the_limit_holds_nothing()
+    public void Hold_up_to_the_limit_is_allowed_and_beyond_it_holds_nothing()
     {
         var purchase = Start();
-        var held = Seats(2);
-        purchase.Hold(EventId, held, MaxSeats, Now);
+        var held = HoldSeats(purchase, MaxSeats);
 
         var exception = Assert.Throws<SeatLimitReachedException>(() =>
-            purchase.Hold(EventId, [held[0], .. Seats(2)], MaxSeats, Now));
+            purchase.Hold(EventId, Guid.NewGuid(), MaxSeats, Now));
 
         Assert.Equal("SEAT_LIMIT_REACHED", exception.Code);
         Assert.Equal(held, purchase.HeldEventSeatIds);
     }
 
     [Fact]
-    public void Hold_up_to_the_limit_is_allowed()
+    public void Repeating_a_hold_at_the_limit_is_not_rejected()
     {
         var purchase = Start();
-        purchase.Hold(EventId, Seats(2), MaxSeats, Now);
+        var held = HoldSeats(purchase, MaxSeats);
 
-        purchase.Hold(EventId, Seats(1), MaxSeats, Now);
-
-        Assert.Equal(MaxSeats, purchase.HeldEventSeatIds.Count);
+        Assert.False(purchase.Hold(EventId, held[0], MaxSeats, Now));
     }
 
     [Fact]
     public void Hold_of_another_event_holds_nothing()
     {
         var purchase = Start();
-        var held = Seats(1);
-        purchase.Hold(EventId, held, MaxSeats, Now);
 
-        Assert.Throws<ArgumentException>(() => purchase.Hold(OtherEventId, Seats(1), MaxSeats, Now));
-
-        Assert.Equal(held, purchase.HeldEventSeatIds);
-    }
-
-    [Fact]
-    public void Session_without_seats_cannot_hold_seats_of_another_event()
-    {
-        var purchase = Start();
-
-        Assert.Throws<ArgumentException>(() => purchase.Hold(OtherEventId, Seats(1), MaxSeats, Now));
+        Assert.Throws<ArgumentException>(() => purchase.Hold(OtherEventId, Guid.NewGuid(), MaxSeats, Now));
 
         Assert.Empty(purchase.HeldEventSeatIds);
     }
@@ -134,21 +125,19 @@ public class PurchaseTests
     public void Releasing_every_seat_keeps_the_session_bound_to_its_event()
     {
         var purchase = Start();
-        var held = Seats(1);
-        purchase.Hold(EventId, held, MaxSeats, Now);
+        var held = HoldSeats(purchase, 1);
 
         purchase.Release(held[0]);
 
         Assert.Equal(EventId, purchase.EventId);
-        Assert.Throws<ArgumentException>(() => purchase.Hold(OtherEventId, Seats(1), MaxSeats, Now));
+        Assert.Throws<ArgumentException>(() => purchase.Hold(OtherEventId, Guid.NewGuid(), MaxSeats, Now));
     }
 
     [Fact]
-    public void Partial_hold_keeps_the_seats_that_did_not_conflict()
+    public void Release_drops_only_that_seat()
     {
         var purchase = Start();
-        var seats = Seats(3);
-        purchase.Hold(EventId, seats, MaxSeats, Now);
+        var seats = HoldSeats(purchase, 3);
 
         // seats[1] could not be locked: another purchase holds it.
         purchase.Release(seats[1]);
@@ -165,7 +154,7 @@ public class PurchaseTests
         Assert.False(purchase.IsExpired(expiresAt.AddTicks(-1)));
         Assert.True(purchase.IsExpired(expiresAt));
         var exception = Assert.Throws<PurchaseExpiredException>(() =>
-            purchase.Hold(EventId, Seats(1), MaxSeats, expiresAt));
+            purchase.Hold(EventId, Guid.NewGuid(), MaxSeats, expiresAt));
         Assert.Equal("SESSION_EXPIRED", exception.Code);
         Assert.Empty(purchase.HeldEventSeatIds);
     }
@@ -174,18 +163,17 @@ public class PurchaseTests
     public void Changing_the_held_seats_clears_the_payment_token()
     {
         var purchase = Start();
-        var seats = Seats(2);
-        purchase.Hold(EventId, seats, MaxSeats, Now);
+        var seats = HoldSeats(purchase, 2);
         purchase.SetPaymentToken("token-1");
 
-        purchase.Hold(EventId, seats, MaxSeats, Now);
+        purchase.Hold(EventId, seats[0], MaxSeats, Now);
         Assert.Equal("token-1", purchase.PaymentToken);
 
         purchase.Release(seats[0]);
         Assert.Null(purchase.PaymentToken);
 
         purchase.SetPaymentToken("token-2");
-        purchase.Hold(EventId, Seats(1), MaxSeats, Now);
+        purchase.Hold(EventId, Guid.NewGuid(), MaxSeats, Now);
         Assert.Null(purchase.PaymentToken);
     }
 }

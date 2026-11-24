@@ -63,15 +63,14 @@ public sealed class Purchase
     public bool IsExpired(DateTime nowUtc) => nowUtc >= ExpiresAtUtc;
 
     /// <summary>
-    /// Adds the given seats of <paramref name="eventId"/> to the purchase and returns the ones it did not
-    /// hold yet, which the caller must lock until <see cref="ExpiresAtUtc"/>. Seats already held are
-    /// ignored. If a rule fails nothing is held. A returned seat that cannot be locked (another purchase
-    /// holds it) must be dropped with <see cref="Release"/>; the others stay held (partial hold).
+    /// Holds a seat of <paramref name="eventId"/>. Returns true if the purchase did not hold it yet: the
+    /// caller must then lock it until <see cref="ExpiresAtUtc"/>, and <see cref="Release"/> it if the lock
+    /// fails (another purchase holds it). Returns false if the purchase already holds it.
     /// </summary>
     /// <exception cref="PurchaseExpiredException">The session has expired.</exception>
-    /// <exception cref="ArgumentException">The seats belong to another event than the purchase.</exception>
-    /// <exception cref="SeatLimitReachedException">Held plus new seats would exceed <paramref name="maxSeats"/>.</exception>
-    public IReadOnlyList<Guid> Hold(Guid eventId, IEnumerable<Guid> eventSeatIds, int maxSeats, DateTime nowUtc)
+    /// <exception cref="ArgumentException">The seat belongs to another event than the purchase.</exception>
+    /// <exception cref="SeatLimitReachedException">The purchase already holds <paramref name="maxSeats"/> seats.</exception>
+    public bool Hold(Guid eventId, Guid eventSeatId, int maxSeats, DateTime nowUtc)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxSeats);
 
@@ -85,20 +84,20 @@ public sealed class Purchase
             throw new ArgumentException("A purchase can only hold seats of a single event.", nameof(eventId));
         }
 
-        var newSeatIds = eventSeatIds.Distinct().Except(_heldEventSeatIds).ToList();
+        if (_heldEventSeatIds.Contains(eventSeatId))
+        {
+            return false;
+        }
 
-        if (_heldEventSeatIds.Count + newSeatIds.Count > maxSeats)
+        if (_heldEventSeatIds.Count >= maxSeats)
         {
             throw new SeatLimitReachedException(maxSeats);
         }
 
-        if (newSeatIds.Count > 0)
-        {
-            _heldEventSeatIds.AddRange(newSeatIds);
-            PaymentToken = null;
-        }
+        _heldEventSeatIds.Add(eventSeatId);
+        PaymentToken = null;
 
-        return newSeatIds;
+        return true;
     }
 
     /// <summary>
