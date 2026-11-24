@@ -10,6 +10,7 @@ namespace BookingService.Application.EventSeats.Commands;
 /// and reserves it for the buyer (identified by email and buyer token) during <see cref="EventSeatReservationPolicy.Duration"/>.
 /// Issues a new buyer token when the command has none.
 /// </summary>
+[Obsolete("Replaced by HoldSeatHandler: the seat lock holds the purchaseId and the email lives in the purchase session. Remove when the Api migrates to the purchase session.")]
 public sealed class ReserveEventSeatHandler
 {
     private readonly IEventCatalog _eventCatalog;
