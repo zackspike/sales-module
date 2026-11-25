@@ -59,6 +59,42 @@ public class ConfirmPurchaseHandlerTests
         Assert.Null(stored.PaymentToken);
     }
 
+    [Fact]
+    public async Task Client_disconnecting_during_the_capture_does_not_undo_a_paid_sale()
+    {
+        // The fan closes the tab while /capture is in flight: Payment may already have charged, so the capture
+        // must not be cancelled and the sale must commit.
+        var seat = Seat();
+        var context = new Context([seat]);
+        var session = context.SessionHolding(seat);
+        using var request = new CancellationTokenSource();
+        context.Payment.DuringCapture = request.Cancel;
+
+        var result = await context.Handler().HandleAsync(new(session.Id, Guid.NewGuid()), request.Token);
+
+        Assert.Equal(ConfirmPurchaseStatus.Purchased, result.Status);
+        Assert.False(context.Payment.LastCaptureCancellationToken.CanBeCanceled);
+        Assert.Equal(EventSeatStatus.Sold, seat.Status);
+        Assert.Single(context.Outbox.Committed);
+    }
+
+    [Fact]
+    public async Task Paid_purchase_returns_its_tickets_even_if_the_catalog_fails_after_the_commit()
+    {
+        // The seat numbers are resolved once inside the transaction and reused: a second lookup after the
+        // commit could turn a paid purchase into an error.
+        var seat = Seat();
+        var catalog = new CountingVenueSeatCatalog(new VenueSeat(seat.VenueSeatId, ZoneId, "A-1")) { FailAfterCalls = 1 };
+        var context = new Context([seat], catalog);
+        var session = context.SessionHolding(seat);
+
+        var result = await context.Handler().HandleAsync(new(session.Id, Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(ConfirmPurchaseStatus.Purchased, result.Status);
+        Assert.Equal("A-1", result.Purchase!.Tickets.Single().SeatNumber);
+        Assert.Equal(1, catalog.GetByIdsCalls);
+    }
+
     [Theory]
     [InlineData(PaymentCallStatus.NotAuthorized, ConfirmPurchaseStatus.PaymentNotAuthorized)]
     [InlineData(PaymentCallStatus.Unavailable, ConfirmPurchaseStatus.PaymentUnavailable)]
@@ -249,10 +285,10 @@ public class ConfirmPurchaseHandlerTests
     }
 
     [Fact]
-    public async Task Session_with_time_for_one_capture_but_not_its_retry_is_expired_without_calling_payment()
+    public async Task Margin_configured_for_more_capture_attempts_expires_a_session_with_time_for_only_one()
     {
-        // 15 s left covers one 10 s capture but not the retry of decision 11: the token and the seat locks
-        // (decision 17) could run out while the sale is in flight.
+        // The margin is one capture timeout by default (contract, decision 15). If CaptureAttempts is raised to
+        // cover the retry of decision 11, 15 s left no longer covers two 10 s captures.
         var seat = Seat();
         var context = new Context([seat]);
         var startedAtUtc = DateTime.UtcNow - SessionDuration + TimeSpan.FromSeconds(15);
@@ -387,9 +423,9 @@ public class ConfirmPurchaseHandlerTests
 
     private sealed class Context
     {
-        private readonly FakeVenueSeatCatalog _venueCatalog;
+        private readonly IVenueSeatCatalog _venueCatalog;
 
-        public Context(IReadOnlyList<EventSeat> seats, FakeVenueSeatCatalog? venueCatalog = null)
+        public Context(IReadOnlyList<EventSeat> seats, IVenueSeatCatalog? venueCatalog = null)
         {
             // Seat numbers follow the order the seats were given: the first one is A-1.
             _venueCatalog = venueCatalog ?? new FakeVenueSeatCatalog(
@@ -409,7 +445,7 @@ public class ConfirmPurchaseHandlerTests
 
         public FakePaymentGateway Payment { get; } = new();
 
-        public ConfirmPurchaseHandler Handler(TimeSpan? captureTimeout = null, int captureAttempts = 1) =>
+        public ConfirmPurchaseHandler Handler(TimeSpan? captureTimeout = null, int? captureAttempts = null) =>
             new(Sessions,
                 Sales,
                 _venueCatalog,
@@ -420,7 +456,7 @@ public class ConfirmPurchaseHandlerTests
                 new PaymentOptions
                 {
                     CaptureTimeout = captureTimeout ?? TimeSpan.FromSeconds(10),
-                    CaptureAttempts = captureAttempts
+                    CaptureAttempts = captureAttempts ?? new PaymentOptions().CaptureAttempts
                 },
                 NullLogger<ConfirmPurchaseHandler>.Instance);
 

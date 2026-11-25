@@ -11,7 +11,7 @@ namespace BookingService.Application.Purchases.Commands;
 /// "Pagar": sells every seat the purchase holds and captures its payment, idempotently per
 /// <c>Idempotency-Key</c>. The session is checked first (ADR-002). A key that already paid this purchase
 /// returns the same tickets right away, before the rules of a new payment, which no longer hold once it is
-/// paid. Otherwise the session needs enough time left for the capture and its retry (decision 15), held seats
+/// paid. Otherwise the session needs enough time left for the capture (decision 15), held seats
 /// and a payment token before anything reaches Payment. Then, in one transaction, the seats are sold, one
 /// <c>ticketSold</c> per ticket goes to the outbox and Payment's <c>/capture</c> is called; the repository
 /// commits only if the capture succeeded (ADR-003), so a failed capture sells nothing. If some held seats are
@@ -93,7 +93,7 @@ public sealed class ConfirmPurchaseHandler
                 : ConfirmPurchaseResult.Failed(ConfirmPurchaseStatus.IdempotencyKeyConflict);
         }
 
-        // Too little time left for the capture and its retry: Payment could void the token, and the seat locks
+        // Too little time left for the capture: Payment could void the token, and the seat locks
         // (which expire with the session, decision 17) could run out while the sale is in flight (decision 15).
         if (purchase.ExpiresAtUtc - nowUtc < _options.PaymentMargin)
         {
@@ -111,17 +111,29 @@ public sealed class ConfirmPurchaseHandler
             return ConfirmPurchaseResult.Failed(ConfirmPurchaseStatus.PaymentNotAuthorized);
         }
 
+        // The seats are sold because the session holds them: no lock holder is checked here. Their locks were
+        // taken with the session's own deadline and expire with it (ADR-001, decision 17), and the session has at
+        // least the payment margin left, so while it is alive its locks are too.
+
+        // Read-only data resolved once inside the transaction, before the capture, and reused for the tickets:
+        // a second catalog lookup after the commit could fail a purchase that is already paid. The outcome's
+        // status never depends on it.
+        IReadOnlyDictionary<Guid, string> seatNumbers = new Dictionary<Guid, string>();
+
         var outcome = await _sales.SellOnceAsync(
             command.IdempotencyKey,
             purchase,
             seat => seat.Sell(purchase, nowUtc),
-            (sales, transactionCancellationToken) =>
-                RecordAndCaptureAsync(purchase.Id, paymentToken, sales, transactionCancellationToken),
+            async (sales, transactionCancellationToken) =>
+            {
+                seatNumbers = await SeatNumbersOfAsync(sales, transactionCancellationToken);
+                return await RecordAndCaptureAsync(purchase.Id, paymentToken, sales, transactionCancellationToken);
+            },
             cancellationToken);
 
         return outcome.Status switch
         {
-            PurchaseSaleStatus.Sold => await PurchasedAsync(purchase, outcome.Sales),
+            PurchaseSaleStatus.Sold => await PurchasedAsync(purchase, outcome.Sales, seatNumbers),
             PurchaseSaleStatus.Replayed => ConfirmPurchaseResult.Replayed(
                 new ConfirmedPurchase(purchase.Id, await TicketsOfAsync(outcome.Sales, cancellationToken))),
             PurchaseSaleStatus.SeatsUnavailable => ConfirmPurchaseResult.SeatsUnavailable(
@@ -132,9 +144,14 @@ public sealed class ConfirmPurchaseHandler
     }
 
     /// <summary>
-    /// What runs inside the sale's transaction: checks every seat's venue data (so a broken seat rolls back
-    /// instead of being charged), records one <c>ticketSold</c> per ticket and captures the payment. The
-    /// repository commits only if the capture succeeded.
+    /// What runs inside the sale's transaction once the seat numbers are resolved (so a seat with broken venue
+    /// data has already rolled back instead of being charged): records one <c>ticketSold</c> per ticket and
+    /// captures the payment. The repository commits only if the capture succeeded.
+    /// <para>
+    /// The capture ignores the request's cancellation: if the fan closes the tab mid-capture, Payment may still
+    /// charge, so Booking keeps waiting for its answer instead of rolling back a paid sale (decision 15).
+    /// <c>Payment:CaptureTimeout</c>, enforced by the payment client, bounds the wait.
+    /// </para>
     /// </summary>
     private async Task<PaymentCaptureResult> RecordAndCaptureAsync(
         Guid purchaseId,
@@ -142,19 +159,17 @@ public sealed class ConfirmPurchaseHandler
         IReadOnlyList<EventSeatSale> sales,
         CancellationToken cancellationToken)
     {
-        await SeatNumbersOfAsync(sales, cancellationToken);
         await _outbox.AddAsync(sales.Select(sale => TicketSoldOf(purchaseId, sale)).ToList(), cancellationToken);
-        return await _payment.CaptureAsync(paymentToken, cancellationToken);
+        return await _payment.CaptureAsync(paymentToken, CancellationToken.None);
     }
 
-    private async Task<ConfirmPurchaseResult> PurchasedAsync(PurchaseSession purchase, IReadOnlyList<EventSeatSale> sales)
+    private async Task<ConfirmPurchaseResult> PurchasedAsync(
+        PurchaseSession purchase,
+        IReadOnlyList<EventSeatSale> sales,
+        IReadOnlyDictionary<Guid, string> seatNumbers)
     {
         await AfterPurchaseCommittedAsync(purchase, sales);
-
-        // The venue data was already checked inside the transaction; the sale is committed, so the tickets are
-        // built even if the request was cancelled meanwhile.
-        return ConfirmPurchaseResult.Purchased(
-            new ConfirmedPurchase(purchase.Id, await TicketsOfAsync(sales, CancellationToken.None)));
+        return ConfirmPurchaseResult.Purchased(new ConfirmedPurchase(purchase.Id, TicketsOf(sales, seatNumbers)));
     }
 
     /// <summary>
@@ -190,11 +205,13 @@ public sealed class ConfirmPurchaseHandler
 
     private async Task<IReadOnlyList<IssuedTicket>> TicketsOfAsync(
         IReadOnlyList<EventSeatSale> sales,
-        CancellationToken cancellationToken)
-    {
-        var seatNumbers = await SeatNumbersOfAsync(sales, cancellationToken);
-        return sales.Select(sale => IssuedTicket.From(sale, seatNumbers[sale.Seat.VenueSeatId])).ToList();
-    }
+        CancellationToken cancellationToken) =>
+        TicketsOf(sales, await SeatNumbersOfAsync(sales, cancellationToken));
+
+    private static IReadOnlyList<IssuedTicket> TicketsOf(
+        IReadOnlyList<EventSeatSale> sales,
+        IReadOnlyDictionary<Guid, string> seatNumbers) =>
+        sales.Select(sale => IssuedTicket.From(sale, seatNumbers[sale.Seat.VenueSeatId])).ToList();
 
     /// <summary>
     /// Seat numbers of the sold seats, keyed by venue seat id, in one catalog call.

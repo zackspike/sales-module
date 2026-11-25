@@ -34,6 +34,9 @@ public interface IPurchaseSaleRepository
     /// the capture's status.</item>
     /// </list>
     /// An exception thrown by <paramref name="sell"/> or <paramref name="capture"/> rolls back and propagates.
+    /// Once <paramref name="capture"/> returned <see cref="PaymentCallStatus.Succeeded"/> the payment is taken, so
+    /// the commit must not depend on <paramref name="cancellationToken"/> (the request's): a client that
+    /// disconnects at that point must not undo a sale it already paid for.
     /// Concurrent calls for the same seats can't both sell them.
     /// </summary>
     Task<PurchaseSaleOutcome> SellOnceAsync(

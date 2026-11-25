@@ -20,6 +20,11 @@ public sealed class FakePaymentGateway : IPaymentGateway
 
     public string? LastCapturedToken { get; private set; }
 
+    public CancellationToken LastCaptureCancellationToken { get; private set; }
+
+    /// <summary>Runs while the capture is in flight, e.g. to simulate the client disconnecting.</summary>
+    public Action? DuringCapture { get; set; }
+
     public Task<PaymentInitResult> InitAsync(
         Guid purchaseId,
         DateTime expiresAtUtc,
@@ -37,6 +42,9 @@ public sealed class FakePaymentGateway : IPaymentGateway
     {
         CaptureCalls++;
         LastCapturedToken = token;
+        LastCaptureCancellationToken = cancellationToken;
+        DuringCapture?.Invoke();
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(CaptureResult);
     }
 }
