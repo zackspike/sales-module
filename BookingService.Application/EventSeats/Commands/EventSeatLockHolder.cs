@@ -8,6 +8,7 @@ namespace BookingService.Application.EventSeats.Commands;
 /// and kept by the buyer's browser, so knowing someone's email is not enough to release or buy their reservation.
 /// The email (trimmed, case-insensitive) keeps the rule that the seat is bought with the email it was reserved with.
 /// </summary>
+[Obsolete("Replaced by PurchaseSeatLockHolder: the seat lock holds the purchaseId. Remove with the MVP-02 handlers.")]
 internal static class EventSeatLockHolder
 {
     // A missing token yields ":email", which never matches a lock: reserve always uses a non-empty token.
