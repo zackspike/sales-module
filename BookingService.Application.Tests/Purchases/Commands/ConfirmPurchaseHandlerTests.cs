@@ -210,15 +210,6 @@ public class ConfirmPurchaseHandlerTests
     }
 
     [Fact]
-    public void Capture_timeout_and_attempts_must_be_positive()
-    {
-        var context = new Context([]);
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => context.Handler(captureTimeout: TimeSpan.Zero));
-        Assert.Throws<ArgumentOutOfRangeException>(() => context.Handler(captureAttempts: 0));
-    }
-
-    [Fact]
     public async Task Key_already_used_by_another_purchase_is_a_conflict()
     {
         var paid = Seat();

@@ -42,10 +42,7 @@ public sealed class ConfirmPurchaseHandler
         PaymentOptions options,
         ILogger<ConfirmPurchaseHandler> logger)
     {
-        // A zero or negative value would silently turn off the margin of decision 15.
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(options.CaptureTimeout, TimeSpan.Zero, "Payment:CaptureTimeout");
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(options.CaptureAttempts, "Payment:CaptureAttempts");
-
+        // AddApplication validates the options at startup.
         _sessions = sessions;
         _sales = sales;
         _venueSeatCatalog = venueSeatCatalog;
