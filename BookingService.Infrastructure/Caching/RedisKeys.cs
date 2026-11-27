@@ -9,6 +9,8 @@ internal static class RedisKeys
 {
     public static RedisKey SeatLock(Guid eventSeatId) => $"booking:seat-lock:{eventSeatId}";
 
+    public static RedisKey Session(Guid purchaseId) => $"booking:session:{purchaseId}";
+
     public static RedisKey Idempotency(Guid idempotencyKey) => $"booking:idempotency:{idempotencyKey}";
 
     public static RedisKey EventSeats(Guid eventId) => $"booking:event:{eventId}:seats";
