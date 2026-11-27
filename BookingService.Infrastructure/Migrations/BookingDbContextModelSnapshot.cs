@@ -119,6 +119,9 @@ namespace BookingService.Infrastructure.Migrations
                     b.Property<Guid>("IdempotencyKey")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("PurchaseSaleIdempotencyKey")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("SoldAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -136,10 +139,63 @@ namespace BookingService.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IdempotencyKey\" != '00000000-0000-0000-0000-000000000000'");
 
+                    b.HasIndex("PurchaseSaleIdempotencyKey");
+
                     b.HasIndex("TicketCode")
                         .IsUnique();
 
                     b.ToTable("tickets", (string)null);
+                });
+
+            modelBuilder.Entity("BookingService.Infrastructure.Messaging.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAtUtc")
+                        .HasFilter("\"PublishedAtUtc\" IS NULL");
+
+                    b.ToTable("outbox_messages", (string)null);
+                });
+
+            modelBuilder.Entity("BookingService.Infrastructure.Persistence.PurchaseSaleRow", b =>
+                {
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PurchaseId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("IdempotencyKey");
+
+                    b.ToTable("purchase_sales", (string)null);
                 });
 
             modelBuilder.Entity("BookingService.Domain.EventSeats.EventSeat", b =>
@@ -158,6 +214,11 @@ namespace BookingService.Infrastructure.Migrations
                         .HasForeignKey("EventSeatId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("BookingService.Infrastructure.Persistence.PurchaseSaleRow", null)
+                        .WithMany()
+                        .HasForeignKey("PurchaseSaleIdempotencyKey")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 #pragma warning restore 612, 618
         }
