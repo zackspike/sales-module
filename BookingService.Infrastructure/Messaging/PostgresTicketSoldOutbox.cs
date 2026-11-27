@@ -33,7 +33,7 @@ public sealed class PostgresTicketSoldOutbox : ITicketSoldOutbox
 
         foreach (var message in messages)
         {
-            var soldAtUtc = DateTime.SpecifyKind(message.SoldAtUtc, DateTimeKind.Utc);
+            var soldAtUtc = ToPostgresPrecision(message.SoldAtUtc);
             _dbContext.OutboxMessages.Add(new OutboxMessage
             {
                 Id = Guid.NewGuid(),
@@ -53,6 +53,16 @@ public sealed class PostgresTicketSoldOutbox : ITicketSoldOutbox
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// PostgreSQL keeps microseconds and .NET keeps 100 ns ticks, so the stored ticket loses the last digit. The
+    /// event uses the stored value, so <c>soldAt</c> matches what <c>GET /tickets/{code}</c> returns.
+    /// </summary>
+    private static DateTime ToPostgresPrecision(DateTime value)
+    {
+        var utc = DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        return utc.AddTicks(-(utc.Ticks % TimeSpan.TicksPerMicrosecond));
     }
 
     /// <summary>The <c>data</c> of <c>ticketSold</c>, with the names of the contract (section 3).</summary>

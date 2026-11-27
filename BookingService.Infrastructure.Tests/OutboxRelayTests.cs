@@ -216,6 +216,57 @@ public sealed class OutboxRelayTests
         Assert.True(relay.ExecuteTask!.IsCompletedSuccessfully);
     }
 
+    [Fact]
+    public async Task A_payload_that_is_not_json_never_reaches_the_outbox()
+    {
+        // jsonb rejects it, so the relay can never meet a message whose envelope can't be built and that would
+        // block every message behind it.
+        await using var db = new BookingDbContext(_options);
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = PostgresTicketSoldOutbox.TicketSoldType,
+            OccurredAtUtc = DateTime.UtcNow,
+            Payload = "not json"
+        });
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.Equal(
+            Npgsql.PostgresErrorCodes.InvalidTextRepresentation,
+            Assert.IsType<Npgsql.PostgresException>(exception.InnerException).SqlState);
+    }
+
+    [Fact]
+    public async Task A_large_backlog_drains_in_batches_without_losing_or_repeating_messages()
+    {
+        var start = DateTime.UtcNow.AddMinutes(-10);
+        await using (var db = new BookingDbContext(_options))
+        {
+            for (var i = 0; i < 250; i++)
+            {
+                db.OutboxMessages.Add(new OutboxMessage
+                {
+                    Id = Guid.NewGuid(),
+                    Type = PostgresTicketSoldOutbox.TicketSoldType,
+                    OccurredAtUtc = start.AddMilliseconds(i),
+                    Payload = "{}"
+                });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        var publisher = new FakePublisher();
+        var relay = Relay(publisher);
+
+        Assert.Equal(100, await relay.RelayPendingAsync(CancellationToken.None));
+        Assert.Equal(100, await relay.RelayPendingAsync(CancellationToken.None));
+        Assert.Equal(50, await relay.RelayPendingAsync(CancellationToken.None));
+        Assert.Equal(0, await relay.RelayPendingAsync(CancellationToken.None));
+        Assert.Equal(250, publisher.Published.Distinct().Count());
+        Assert.Equal(250, publisher.Published.Count);
+    }
+
     private OutboxRelay Relay(IOutboxPublisher publisher, OutboxOptions? options = null)
     {
         var services = new ServiceCollection()
