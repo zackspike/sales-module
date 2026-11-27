@@ -96,6 +96,126 @@ public sealed class OutboxRelayTests
         Assert.Empty(publisher.Published);
     }
 
+    [Fact]
+    public async Task An_empty_outbox_publishes_nothing()
+    {
+        var publisher = new FakePublisher();
+
+        Assert.Equal(0, await Relay(publisher).RelayPendingAsync(CancellationToken.None));
+        Assert.Empty(publisher.Published);
+    }
+
+    [Fact]
+    public async Task A_batch_never_exceeds_its_size_and_keeps_the_order_across_cycles()
+    {
+        var start = DateTime.UtcNow.AddMinutes(-1);
+        var ids = new List<Guid>();
+        for (var i = 0; i < 5; i++)
+        {
+            ids.Add(await AddMessageAsync(start.AddSeconds(i)));
+        }
+
+        var publisher = new FakePublisher();
+        var relay = Relay(publisher, new OutboxOptions { BatchSize = 2 });
+
+        Assert.Equal(2, await relay.RelayPendingAsync(CancellationToken.None));
+        Assert.Equal(2, await relay.RelayPendingAsync(CancellationToken.None));
+        Assert.Equal(1, await relay.RelayPendingAsync(CancellationToken.None));
+        Assert.Equal(0, await relay.RelayPendingAsync(CancellationToken.None));
+        Assert.Equal(ids, publisher.Published);
+    }
+
+    [Fact]
+    public async Task Stopping_mid_batch_keeps_what_was_already_published()
+    {
+        var published = await AddMessageAsync(DateTime.UtcNow.AddSeconds(-2));
+        var interrupted = await AddMessageAsync(DateTime.UtcNow.AddSeconds(-1));
+        using var stopping = new CancellationTokenSource();
+        var publisher = new FakePublisher { HangingMessageId = interrupted };
+        publisher.OnPublished = _ => stopping.Cancel();
+
+        await Relay(publisher).RelayPendingAsync(stopping.Token);
+
+        var messages = await MessagesAsync();
+        Assert.NotNull(messages.Single(m => m.Id == published).PublishedAtUtc);
+
+        // The host stopping is not a failed attempt: the message is simply left for the next run.
+        var pending = messages.Single(m => m.Id == interrupted);
+        Assert.Null(pending.PublishedAtUtc);
+        Assert.Equal(0, pending.Attempts);
+        Assert.Null(pending.LastError);
+    }
+
+    [Fact]
+    public async Task Attempts_accumulate_and_a_long_error_is_truncated()
+    {
+        var id = await AddMessageAsync(DateTime.UtcNow);
+        var publisher = new FakePublisher { FailingMessageId = id, Error = new string('x', 5000) };
+        var relay = Relay(publisher);
+
+        await relay.RelayPendingAsync(CancellationToken.None);
+        await relay.RelayPendingAsync(CancellationToken.None);
+        await relay.RelayPendingAsync(CancellationToken.None);
+
+        var message = Assert.Single(await MessagesAsync());
+        Assert.Equal(3, message.Attempts);
+        Assert.Equal(1000, message.LastError!.Length);
+    }
+
+    [Fact]
+    public async Task An_already_published_message_is_never_sent_again()
+    {
+        await using (var db = new BookingDbContext(_options))
+        {
+            db.OutboxMessages.Add(new OutboxMessage
+            {
+                Id = Guid.NewGuid(),
+                Type = PostgresTicketSoldOutbox.TicketSoldType,
+                OccurredAtUtc = DateTime.UtcNow,
+                Payload = "{}",
+                PublishedAtUtc = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var publisher = new FakePublisher();
+
+        Assert.Equal(0, await Relay(publisher).RelayPendingAsync(CancellationToken.None));
+        Assert.Empty(publisher.Published);
+    }
+
+    [Fact]
+    public async Task The_hosted_relay_publishes_on_its_own_survives_a_failed_cycle_and_stops_cleanly()
+    {
+        var id = await AddMessageAsync(DateTime.UtcNow);
+        var publisher = new FakePublisher();
+        var contexts = 0;
+        var services = new ServiceCollection()
+            .AddScoped(_ => Interlocked.Increment(ref contexts) == 1
+                ? throw new InvalidOperationException("Database unreachable.")
+                : new BookingDbContext(_options))
+            .BuildServiceProvider();
+        var relay = new OutboxRelay(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            publisher,
+            new OutboxOptions { PollInterval = TimeSpan.FromMilliseconds(50) },
+            NullLogger<OutboxRelay>.Instance);
+
+        await relay.StartAsync(CancellationToken.None);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!publisher.Published.Contains(id) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        await relay.StopAsync(CancellationToken.None);
+
+        Assert.Contains(id, publisher.Published);
+        Assert.True(contexts >= 2, "The relay should retry after the failed cycle.");
+        Assert.NotNull(Assert.Single(await MessagesAsync()).PublishedAtUtc);
+        Assert.True(relay.ExecuteTask!.IsCompletedSuccessfully);
+    }
+
     private OutboxRelay Relay(IOutboxPublisher publisher, OutboxOptions? options = null)
     {
         var services = new ServiceCollection()
@@ -138,6 +258,10 @@ public sealed class OutboxRelayTests
 
         public Guid? HangingMessageId { get; init; }
 
+        public string Error { get; init; } = "Broker unavailable.";
+
+        public Action<Guid>? OnPublished { get; set; }
+
         public async Task PublishAsync(OutboxMessage message, CancellationToken cancellationToken)
         {
             if (message.Id == HangingMessageId)
@@ -147,10 +271,15 @@ public sealed class OutboxRelayTests
 
             if (message.Id == FailingMessageId)
             {
-                throw new InvalidOperationException("Broker unavailable.");
+                throw new InvalidOperationException(Error);
             }
 
-            Published.Add(message.Id);
+            lock (Published)
+            {
+                Published.Add(message.Id);
+            }
+
+            OnPublished?.Invoke(message.Id);
         }
     }
 }

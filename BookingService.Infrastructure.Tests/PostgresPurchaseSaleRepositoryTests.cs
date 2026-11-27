@@ -231,6 +231,204 @@ public sealed class PostgresPurchaseSaleRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task A_purchase_without_held_seats_is_rejected_before_anything_is_stored_or_captured()
+    {
+        var (eventId, _) = SeedEvent(1);
+        var purchase = Purchase(eventId, []);
+        var key = Guid.NewGuid();
+        var captures = 0;
+
+        await Assert.ThrowsAsync<ArgumentException>(() => SellAsync(key, purchase, _ =>
+        {
+            captures++;
+            return Task.FromResult(Captured);
+        }));
+
+        Assert.Equal(0, captures);
+        await using var db = new BookingDbContext(_options);
+        Assert.Null(await new PostgresPurchaseSaleRepository(db).FindByIdempotencyKeyAsync(key, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_sell_rule_that_throws_rolls_back_and_frees_the_key()
+    {
+        var (eventId, seats) = SeedEvent(2);
+        var purchase = Purchase(eventId, seats);
+        var key = Guid.NewGuid();
+
+        await using (var db = new BookingDbContext(_options))
+        {
+            // The session ran out between the handler's check and the sale.
+            var expiredAt = purchase.ExpiresAtUtc;
+            await Assert.ThrowsAsync<PurchaseExpiredException>(() =>
+                new PostgresPurchaseSaleRepository(db).SellOnceAsync(
+                    key,
+                    purchase,
+                    seat => seat.Sell(purchase, expiredAt),
+                    (_, _) => Task.FromResult(Captured),
+                    CancellationToken.None));
+        }
+
+        Assert.Empty(await SoldSeatsAsync(eventId));
+        Assert.Empty(await OutboxMessagesOfAsync(purchase.Id));
+        Assert.Equal(PurchaseSaleStatus.Sold, (await SellAsync(key, purchase, _ => Task.FromResult(Captured))).Status);
+    }
+
+    [Fact]
+    public async Task A_key_whose_capture_failed_can_be_used_by_another_purchase()
+    {
+        var (eventId, seats) = SeedEvent(2);
+        var key = Guid.NewGuid();
+        var failed = await SellAsync(
+            key,
+            Purchase(eventId, seats[..1]),
+            _ => Task.FromResult(new PaymentCaptureResult(PaymentCallStatus.Unavailable)));
+
+        var other = Purchase(eventId, seats[1..]);
+        var outcome = await SellAsync(key, other, _ => Task.FromResult(Captured));
+
+        Assert.Equal(PurchaseSaleStatus.NotCaptured, failed.Status);
+        Assert.Equal(PurchaseSaleStatus.Sold, outcome.Status);
+        Assert.Equal([seats[1]], await SoldSeatsAsync(eventId));
+    }
+
+    [Fact]
+    public async Task Each_key_of_a_purchase_that_pays_twice_replays_only_its_own_tickets()
+    {
+        var (eventId, seats) = SeedEvent(2);
+        var purchase = Purchase(eventId, seats[..1]);
+        var firstKey = Guid.NewGuid();
+        var first = await SellAsync(firstKey, purchase, _ => Task.FromResult(Captured));
+
+        // Decision 22: the paid seat leaves the session, which then holds and pays another one.
+        purchase.Release(seats[0]);
+        purchase.Hold(eventId, seats[1], maxSeats: 10, DateTime.UtcNow);
+        var secondKey = Guid.NewGuid();
+        var second = await SellAsync(secondKey, purchase, _ => Task.FromResult(Captured));
+
+        Assert.Equal(PurchaseSaleStatus.Sold, second.Status);
+        await using var db = new BookingDbContext(_options);
+        var repository = new PostgresPurchaseSaleRepository(db);
+        var firstReplay = await repository.FindByIdempotencyKeyAsync(firstKey, CancellationToken.None);
+        var secondReplay = await repository.FindByIdempotencyKeyAsync(secondKey, CancellationToken.None);
+
+        Assert.Equal([first.Sales[0].Ticket.TicketCode], firstReplay!.Sales.Select(s => s.Ticket.TicketCode));
+        Assert.Equal([second.Sales[0].Ticket.TicketCode], secondReplay!.Sales.Select(s => s.Ticket.TicketCode));
+        Assert.Equal(2, (await OutboxMessagesOfAsync(purchase.Id)).Count);
+    }
+
+    [Fact]
+    public async Task Concurrent_purchases_with_overlapping_seats_never_split_a_purchase()
+    {
+        var (eventId, seats) = SeedEvent(3);
+        var a = Purchase(eventId, [seats[0], seats[1]]);
+        var b = Purchase(eventId, [seats[1], seats[2]]);
+
+        var outcomes = await Task.WhenAll(new[] { a, b }.Select(purchase =>
+            SellAsync(Guid.NewGuid(), purchase, async _ =>
+            {
+                await Task.Delay(100);
+                return Captured;
+            })));
+
+        var winner = Assert.Single(outcomes, o => o.Status == PurchaseSaleStatus.Sold);
+        var loser = Assert.Single(outcomes, o => o.Status == PurchaseSaleStatus.SeatsUnavailable);
+        Assert.Equal([new FailedEventSeat(seats[1], SeatSaleFailure.AlreadySold)], loser.FailedSeats);
+
+        // All or nothing: only the winner's two seats are sold, never the loser's free seat.
+        var sold = await SoldSeatsAsync(eventId);
+        Assert.Equal(winner.Sales.Select(s => s.Seat.Id).Order(), sold.Order());
+        Assert.Equal(2, sold.Count);
+    }
+
+    [Fact]
+    public async Task Holder_names_with_quotes_accents_and_emoji_survive_the_jsonb_payload()
+    {
+        const string name = "José \"Pepe\" Ñúñez \\ 🎟️";
+        const string email = "josé.o'neil+tickets@example.com";
+        var (eventId, seats) = SeedEvent(1);
+        var purchase = PurchaseSession.Start(eventId, name, email, DateTime.UtcNow, TimeSpan.FromMinutes(10));
+        purchase.Hold(eventId, seats[0], maxSeats: 10, DateTime.UtcNow);
+        _purchaseIds.Add(purchase.Id);
+
+        await SellAsync(Guid.NewGuid(), purchase, _ => Task.FromResult(Captured));
+
+        var data = JsonDocument.Parse(Assert.Single(await OutboxMessagesOfAsync(purchase.Id)).Payload).RootElement;
+        Assert.Equal(name, data.GetProperty("holderName").GetString());
+        Assert.Equal(email, data.GetProperty("holderEmail").GetString());
+    }
+
+    [Fact]
+    public async Task A_sale_time_without_kind_is_stored_and_serialized_as_utc()
+    {
+        var soldAt = new DateTime(2026, 11, 16, 8, 7, 30, DateTimeKind.Unspecified);
+        var purchaseId = Guid.NewGuid();
+        _purchaseIds.Add(purchaseId);
+
+        await using (var db = new BookingDbContext(_options))
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync();
+            await new PostgresTicketSoldOutbox(db).AddAsync(
+                [new TicketSoldEvent(purchaseId, "TK-kind", Guid.NewGuid(), Guid.NewGuid(), "Jane", "j@example.com", soldAt)],
+                CancellationToken.None);
+            await transaction.CommitAsync();
+        }
+
+        var message = Assert.Single(await OutboxMessagesOfAsync(purchaseId));
+        Assert.Equal(DateTimeKind.Utc, message.OccurredAtUtc.Kind);
+        Assert.Equal(DateTime.SpecifyKind(soldAt, DateTimeKind.Utc), message.OccurredAtUtc);
+        Assert.Equal(
+            "2026-11-16T08:07:30Z",
+            JsonDocument.Parse(message.Payload).RootElement.GetProperty("soldAt").GetString());
+    }
+
+    [Fact]
+    public async Task An_empty_batch_of_messages_writes_nothing()
+    {
+        await using var db = new BookingDbContext(_options);
+        var before = await db.OutboxMessages.CountAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
+        await new PostgresTicketSoldOutbox(db).AddAsync([], CancellationToken.None);
+        await transaction.CommitAsync();
+
+        Assert.Equal(before, await db.OutboxMessages.CountAsync());
+    }
+
+    [Fact]
+    public async Task The_same_context_stays_usable_after_a_rollback()
+    {
+        var (eventId, seats) = SeedEvent(1);
+        var purchase = Purchase(eventId, seats);
+        var key = Guid.NewGuid();
+        await using var db = new BookingDbContext(_options);
+        var repository = new PostgresPurchaseSaleRepository(db);
+        var nowUtc = DateTime.UtcNow;
+
+        var failed = await repository.SellOnceAsync(
+            key,
+            purchase,
+            seat => seat.Sell(purchase, nowUtc),
+            (_, _) => Task.FromResult(new PaymentCaptureResult(PaymentCallStatus.TimedOut)),
+            CancellationToken.None);
+        var retried = await repository.SellOnceAsync(
+            key,
+            purchase,
+            seat => seat.Sell(purchase, nowUtc),
+            (_, _) => Task.FromResult(Captured),
+            CancellationToken.None);
+
+        Assert.Equal(PurchaseSaleStatus.NotCaptured, failed.Status);
+        Assert.Equal(PurchaseSaleStatus.Sold, retried.Status);
+        Assert.Equal(PurchaseSaleStatus.Replayed, (await repository.SellOnceAsync(
+            key,
+            purchase,
+            seat => seat.Sell(purchase, nowUtc),
+            (_, _) => Task.FromResult(Captured),
+            CancellationToken.None)).Status);
+    }
+
+    [Fact]
     public async Task The_outbox_refuses_to_write_outside_a_transaction()
     {
         await using var db = new BookingDbContext(_options);

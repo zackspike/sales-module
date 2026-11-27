@@ -64,7 +64,12 @@ public sealed class OutboxRelay : BackgroundService
             {
                 await _publisher.PublishAsync(message, timeout.Token);
             }
-            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // The host is stopping: not a failed attempt. The message stays pending for the next run.
+                break;
+            }
+            catch (Exception exception)
             {
                 message.Attempts++;
                 message.LastError = Truncate(timeout.IsCancellationRequested

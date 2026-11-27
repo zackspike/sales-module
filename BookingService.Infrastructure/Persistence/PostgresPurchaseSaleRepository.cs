@@ -52,6 +52,12 @@ public sealed class PostgresPurchaseSaleRepository : IPurchaseSaleRepository
         Func<IReadOnlyList<EventSeatSale>, CancellationToken, Task<PaymentCaptureResult>> capture,
         CancellationToken cancellationToken)
     {
+        // Selling nothing would still claim the key and capture a payment with no ticket behind it.
+        if (purchase.HeldEventSeatIds.Count == 0)
+        {
+            throw new ArgumentException($"Purchase session {purchase.Id} holds no seats to sell.", nameof(purchase));
+        }
+
         if (await ReplayOfAsync(idempotencyKey, purchase.Id, cancellationToken) is { } replay)
         {
             return replay;

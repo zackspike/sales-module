@@ -9,6 +9,13 @@ namespace BookingService.Infrastructure.Messaging;
 /// </summary>
 public static class OutboxEnvelope
 {
+    // Keeps accents and other non-ASCII characters readable (José, not José). The message is never embedded
+    // in HTML, so the stricter default escaping buys nothing; JSON quotes and control characters are still escaped.
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     public static byte[] Serialize(OutboxMessage message)
     {
         var envelope = new JsonObject
@@ -19,6 +26,6 @@ public static class OutboxEnvelope
             ["data"] = JsonNode.Parse(message.Payload)
         };
 
-        return JsonSerializer.SerializeToUtf8Bytes(envelope);
+        return JsonSerializer.SerializeToUtf8Bytes(envelope, JsonOptions);
     }
 }
