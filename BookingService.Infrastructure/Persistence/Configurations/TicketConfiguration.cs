@@ -47,5 +47,14 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex("IdempotencyKey")
             .IsUnique()
             .HasFilter("\"IdempotencyKey\" != '00000000-0000-0000-0000-000000000000'");
+
+        // Key of the "Pagar" that sold the ticket. One key sells every seat of the purchase, so it lives in
+        // purchase_sales; tickets sold this way leave the per-seat IdempotencyKey above empty.
+        builder.Property<Guid?>(PostgresPurchaseSaleRepository.PurchaseSaleKeyPropertyName);
+
+        builder.HasOne<PurchaseSaleRow>()
+            .WithMany()
+            .HasForeignKey(PostgresPurchaseSaleRepository.PurchaseSaleKeyPropertyName)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

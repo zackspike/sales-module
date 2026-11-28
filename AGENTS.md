@@ -10,14 +10,14 @@ The solution is divided into four projects plus one xUnit test project per teste
 - `BookingService.Api`
 - `BookingService.Application`
 - `BookingService.Domain`
-- `BookingService.Infrastructure` (EF Core + PostgreSQL, migrations in `Migrations/`; Redis seat locks, idempotency and cache)
+- `BookingService.Infrastructure` (EF Core + PostgreSQL, migrations in `Migrations/`; Redis seat locks, idempotency and cache; `ticketSold` outbox and its RabbitMQ relay in `Messaging/`)
 - `BookingService.Domain.Tests` (references only Domain)
 - `BookingService.Application.Tests` (references only Application)
-- `BookingService.Infrastructure.Tests` (references Infrastructure; includes PostgreSQL/Redis integration tests)
+- `BookingService.Infrastructure.Tests` (references Infrastructure; includes PostgreSQL/Redis/RabbitMQ integration tests)
 
 Other relevant paths:
 
-- `docker-compose.yml`: local PostgreSQL (host port 5433) and Redis (host port 6381).
+- `docker-compose.yml`: local PostgreSQL (host port 5433), Redis (host port 6381) and RabbitMQ (AMQP 5672, management UI 15672).
 - `scripts/`: `bump.sh` (version tag) and `changelog.sh` (release notes).
 - `.github/workflows/`: `validation.yml` (PR lint + tests) and `release.yml` (tag release).
 
@@ -31,7 +31,7 @@ Requires the .NET 10 SDK and Docker.
 | Build | `dotnet build` |
 | Lint | `dotnet format --verify-no-changes` |
 | Test | `dotnet test` |
-| Start PostgreSQL and Redis | `docker compose up -d` |
+| Start PostgreSQL, Redis and RabbitMQ | `docker compose up -d` |
 | Apply migrations | `dotnet ef database update --project BookingService.Infrastructure --startup-project BookingService.Api` |
 | Add a migration | `dotnet ef migrations add <Name> --project BookingService.Infrastructure --startup-project BookingService.Api` |
 | Run API | `dotnet run --project BookingService.Api` |
@@ -39,6 +39,10 @@ Requires the .NET 10 SDK and Docker.
 PostgreSQL integration tests require Docker: `PostgresFixture` starts a disposable container with
 Testcontainers, migrates it and removes it afterwards; they never use `ConnectionStrings__DefaultConnection`.
 Redis integration tests are skipped unless `ConnectionStrings__Redis` is set (e.g. `localhost:6381`).
+RabbitMQ integration tests start their own Testcontainers broker. The outbox relay runs only when
+`ConnectionStrings__RabbitMq` is set (e.g. `amqp://guest:guest@localhost:5672/`) along with PostgreSQL; it publishes
+to the durable topic exchange `RabbitMq:Exchange` (default `booking.events`) with routing key `ticketSold`, and a
+message stays pending in `outbox_messages` until a consumer queue is bound to that exchange.
 Migrations contain no seed data: a new PostgreSQL database starts empty. Only the in-memory
 fallback (no `ConnectionStrings__DefaultConnection`) preloads a dummy event with 50 seats.
 

@@ -19,6 +19,9 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public DbContextOptions<BookingDbContext> Options { get; private set; } = null!;
 
+    /// <summary>Connection string of the container, for tests that need a database of their own in it.</summary>
+    public string ConnectionString => _container.GetConnectionString();
+
     public async Task InitializeAsync()
     {
         await _container.StartAsync();
